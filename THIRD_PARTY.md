@@ -1,7 +1,7 @@
 # Открытые компоненты
 
 Список того, что собранное приложение использует из чужого открытого кода и чужих
-моделей. Правило проекта: MIT/Apache-2.0/BSD — можно, GPL — только с «да» Рустема.
+моделей. Правило проекта: MIT/Apache-2.0/BSD — можно, GPL — только с отдельным «да».
 Ниже только MIT, GPL нет.
 
 ---
@@ -13,8 +13,7 @@
   (`.github/workflows/ios-build.yml`), скачивается и проверяется по sha256
   `e57f8c48933000acabc13bb913fbe82805d483a2deff692cc6738836bd92393b`
 - Лицензия: MIT
-- Источник текста лицензии: локальная копия `rea-lab/targets/whisper.cpp/LICENSE`
-  (тот же текст, что в репозитории `ggml-org/whisper.cpp`)
+- Источник текста лицензии: `github.com/ggml-org/whisper.cpp` (файл `LICENSE`)
 
 ```
 MIT License
@@ -126,12 +125,14 @@ SOFTWARE.
   указывает «License: mit» и описывает файлы как «OpenAI's Whisper models converted to ggml
   format for use with whisper.cpp». Конвертация и квантование не меняют лицензию: MIT это
   разрешает (изменение, слияние, распространение).
-- Три файла, которые скачивает экран «Модели» (имя, точный размер в байтах по Hugging Face API,
-  §6 спецификации):
-  - `ggml-small.bin` — 487 601 967 байт
-  - `ggml-medium-q5_0.bin` — 539 212 467 байт
-  - `ggml-large-v3-turbo-q5_0.bin` — 574 041 195 байт
-  - все три — `huggingface.co/ggerganov/whisper.cpp/resolve/main/<имя файла>`
+- Три файла, которые скачивает экран «Модели» (имя, точный размер в байтах и sha256 —
+  `App/Models/ModelInfo.swift`, §6 спецификации); ссылка закреплена на коммит репозитория
+  `ggerganov/whisper.cpp` на Hugging Face, не на `main`, — чтобы файл по ссылке не менялся:
+  - `ggml-small.bin` — 487 601 967 байт, sha256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`
+  - `ggml-medium-q5_0.bin` — 539 212 467 байт, sha256 `19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f`
+  - `ggml-large-v3-turbo-q5_0.bin` — 574 041 195 байт, sha256 `394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2`
+  - все три — `huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/<имя файла>`;
+    приложение сверяет файл по sha256 после загрузки и при импорте.
 
 ---
 
