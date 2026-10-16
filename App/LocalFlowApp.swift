@@ -18,16 +18,22 @@ struct LocalFlowApp: App {
 }
 
 struct RootView: View {
+    @ObservedObject private var navigation = AppNavigation.shared
+
     var body: some View {
-        TabView {
+        TabView(selection: $navigation.tab) {
             DictationView()
                 .tabItem { Label("Диктовка", systemImage: "mic") }
+                .tag(AppTab.dictation)
             ModelsView()
                 .tabItem { Label("Модели", systemImage: "square.and.arrow.down") }
+                .tag(AppTab.models)
             DictionaryView()
                 .tabItem { Label("Словарь", systemImage: "character.book.closed") }
+                .tag(AppTab.dictionary)
             BenchView()
                 .tabItem { Label("Замер", systemImage: "stopwatch") }
+                .tag(AppTab.bench)
         }
     }
 }
