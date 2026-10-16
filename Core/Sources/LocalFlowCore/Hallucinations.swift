@@ -1,7 +1,17 @@
 import Foundation
 
 public enum Hallucinations {
-    public static let phrases: [String] = []
+    /// Типовые выдумки Whisper на тишине — ровно HALLUCINATIONS из LocalFlow main.py.
+    public static let phrases: [String] = [
+        "продолжение следует", "субтитры создавал",
+        "субтитры сделал", "редактор субтитров",
+        "спасибо за просмотр", "подписывайтесь на канал",
+        "dimatorzok",
+    ]
 
-    public static func matches(_ text: String) -> Bool { false }
+    /// Без учёта регистра, вхождение подстроки.
+    public static func matches(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return phrases.contains { lower.contains($0) }
+    }
 }

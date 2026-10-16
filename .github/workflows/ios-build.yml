@@ -16,8 +16,10 @@ jobs:
       # whisper.cpp b5454 (MIT), sha256 — из данных релиза GitHub
       WHISPER_XCFRAMEWORK_URL: https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-b5454-xcframework.zip
       WHISPER_XCFRAMEWORK_SHA256: e57f8c48933000acabc13bb913fbe82805d483a2deff692cc6738836bd92393b
-      # Silero VAD для whisper.cpp (MIT)
-      VAD_MODEL_URL: https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
+      # Silero VAD для whisper.cpp (MIT), закреплено на коммит репозитория Hugging Face;
+      # sha256 — lfs.oid из huggingface.co/api/models/ggml-org/whisper-vad, 885098 байт
+      VAD_MODEL_URL: https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin
+      VAD_MODEL_SHA256: 2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987
       VAD_MODEL_FILE: App/Resources/ggml-silero-v6.2.0.bin
       # XcodeGen 2.46.0 (MIT), sha256 — digest ассета xcodegen.zip в релизе GitHub
       XCODEGEN_URL: https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
@@ -53,10 +55,7 @@ jobs:
         run: |
           mkdir -p "$(dirname "$VAD_MODEL_FILE")"
           curl -fsSL -o "$VAD_MODEL_FILE" "$VAD_MODEL_URL"
-          size=$(stat -f%z "$VAD_MODEL_FILE")
-          echo "size: $size bytes"
-          shasum -a 256 "$VAD_MODEL_FILE"
-          test "$size" -gt 500000
+          echo "$VAD_MODEL_SHA256  $VAD_MODEL_FILE" | shasum -a 256 -c -
 
       - name: Generate Xcode project
         run: '"$XCODEGEN" generate'
