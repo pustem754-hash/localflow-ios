@@ -23,7 +23,26 @@ public enum RecordingDecision: Equatable, Sendable {
 }
 
 public enum RecordingGuard {
-    public static let minHold = 0.0, extraAudio = 0.0, lostAudio = 0.0, lostShare = 0.0, lostMin = 0.0
+    /// MIN_HOLD_S, EXTRA_AUDIO_S, LOST_AUDIO_S, LOST_AUDIO_SHARE, LOST_AUDIO_MIN_S из LocalFlow main.py.
+    public static let minHold = 0.3, extraAudio = 0.5, lostAudio = 1.0, lostShare = 0.75, lostMin = 1.5
 
-    public static func decide(hold: Double, audio: Double) -> RecordingDecision { .reject(.empty) }
+    /// Как текущий LocalFlow main.py `_finalize` (после 16.10 01:08), в том же порядке.
+    /// `hold` — сколько шла запись, `audio` — сколько секунд звука реально пришло.
+    public static func decide(hold: Double, audio: Double) -> RecordingDecision {
+        if hold < minHold {
+            return .reject(.tooShort(hold: hold))
+        }
+        var audio = audio
+        var keepLast: Double?
+        if audio - hold > extraAudio {
+            // лишнее — старый звук в начале клипа: оставляем последние «запись + 0,5 c»
+            keepLast = hold + extraAudio
+            audio = hold + extraAudio
+        }
+        // потеря — только если все три условия (11.55/10.50 и 5.0/3.0 — не потеря)
+        if hold - audio > lostAudio && audio < hold * lostShare && audio < lostMin {
+            return .reject(.lostAudio(hold: hold, audio: audio))
+        }
+        return .transcribe(keepLastSeconds: keepLast)
+    }
 }
