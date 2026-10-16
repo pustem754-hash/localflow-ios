@@ -24,7 +24,8 @@ public struct Replacements: Equatable, Sendable {
         for line in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            if let entry = LineParser(trimmed).entry() {
+            var parser = LineParser(trimmed)
+            if let entry = parser.entry() {
                 entries.append(entry)
             }
         }
