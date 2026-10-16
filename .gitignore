@@ -10,3 +10,13 @@ DerivedData/
 xcuserdata/
 .autopilot/
 BRIEF.md
+# Swift / Xcode: генерируется, в git не хранится
+.build/
+.swiftpm/
+*.xcodeproj/
+*.xcworkspace/
+*.xcframework/
+# бинарники моделей и сборки
+*.bin
+*.ipa
+Payload/

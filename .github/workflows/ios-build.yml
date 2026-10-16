@@ -1,0 +1,88 @@
+name: ios-build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # whisper.cpp b5454 (MIT), sha256 — из данных релиза GitHub
+      WHISPER_XCFRAMEWORK_URL: https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-b5454-xcframework.zip
+      WHISPER_XCFRAMEWORK_SHA256: e57f8c48933000acabc13bb913fbe82805d483a2deff692cc6738836bd92393b
+      # Silero VAD для whisper.cpp (MIT)
+      VAD_MODEL_URL: https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
+      VAD_MODEL_FILE: App/Resources/ggml-silero-v6.2.0.bin
+      # XcodeGen 2.46.0 (MIT), sha256 — digest ассета xcodegen.zip в релизе GitHub
+      XCODEGEN_URL: https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+      XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Xcode
+        run: xcodebuild -version
+
+      - name: XcodeGen 2.46.0
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" "$XCODEGEN_URL"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen-dist"
+          bin=$(find "$RUNNER_TEMP/xcodegen-dist" -type f -name xcodegen -path '*/bin/*' | head -1)
+          test -n "$bin"
+          "$bin" --version
+          echo "XCODEGEN=$bin" >> "$GITHUB_ENV"
+
+      - name: whisper.cpp XCFramework b5454
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/whisper.zip" "$WHISPER_XCFRAMEWORK_URL"
+          echo "$WHISPER_XCFRAMEWORK_SHA256  $RUNNER_TEMP/whisper.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/whisper.zip" -d "$RUNNER_TEMP/whisper"
+          src=$(find "$RUNNER_TEMP/whisper" -type d -name whisper.xcframework | head -1)
+          test -n "$src"
+          mkdir -p build/vendor
+          cp -R "$src" build/vendor/whisper.xcframework
+          ls build/vendor/whisper.xcframework
+
+      - name: VAD-модель в ресурсы приложения
+        run: |
+          mkdir -p "$(dirname "$VAD_MODEL_FILE")"
+          curl -fsSL -o "$VAD_MODEL_FILE" "$VAD_MODEL_URL"
+          size=$(stat -f%z "$VAD_MODEL_FILE")
+          echo "size: $size bytes"
+          shasum -a 256 "$VAD_MODEL_FILE"
+          test "$size" -gt 500000
+
+      - name: Generate Xcode project
+        run: '"$XCODEGEN" generate'
+
+      - name: Build (без подписи)
+        run: |
+          xcodebuild -quiet \
+            -project LocalFlow.xcodeproj -scheme LocalFlow -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package LocalFlow.ipa
+        run: |
+          app=build/DerivedData/Build/Products/Release-iphoneos/LocalFlow.app
+          test -f "$app/ggml-silero-v6.2.0.bin"
+          test -d "$app/Frameworks/whisper.framework"
+          plutil -p "$app/Info.plist" | grep -E 'NSMicrophoneUsageDescription|UIFileSharingEnabled|LSSupportsOpeningDocumentsInPlace'
+          mkdir -p Payload
+          cp -R "$app" Payload/
+          zip -qry LocalFlow.ipa Payload
+          ls -l LocalFlow.ipa
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: LocalFlow.ipa
+          path: LocalFlow.ipa
+          archive: false
+          if-no-files-found: error

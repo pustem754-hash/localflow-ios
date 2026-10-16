@@ -1,0 +1,41 @@
+# XcodeGen 2.46.0 (MIT). Проект генерируется на раннере, .xcodeproj в git не хранится.
+# whisper.xcframework (b5454) и VAD-модель кладёт workflow ios-build перед генерацией.
+name: LocalFlow
+options:
+  bundleIdPrefix: io.github.pustem754
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: ru
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+packages:
+  LocalFlowCore:
+    path: Core
+targets:
+  LocalFlow:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: LocalFlowCore
+      - framework: build/vendor/whisper.xcframework
+        embed: true
+    settings:
+      base:
+        PRODUCT_NAME: LocalFlow
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.pustem754.localflow
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+schemes:
+  LocalFlow:
+    build:
+      targets:
+        LocalFlow: all

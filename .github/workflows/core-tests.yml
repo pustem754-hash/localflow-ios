@@ -1,0 +1,20 @@
+name: core-tests
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Swift
+        run: swift --version
+      - name: swift test (Core)
+        working-directory: Core
+        run: swift test
