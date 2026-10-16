@@ -206,14 +206,15 @@ final class DictationController: ObservableObject {
         while case .loading = store.engineState {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        guard case .loaded = store.engineState, !isBenchRunning else {
+        guard case .loaded(let modelID) = store.engineState, modelID == store.selected, !isBenchRunning else {
             state = .noModel
             return
         }
 
         let raw: String
         do {
-            raw = try await WhisperEngine.shared.transcribe(samples)
+            // Движок сам сверяет, что в нём именно выбранная модель, иначе — EngineError.wrongModel.
+            raw = try await WhisperEngine.shared.transcribe(samples, expectedModel: modelID)
         } catch {
             state = .failed(error.localizedDescription)
             return

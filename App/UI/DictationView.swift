@@ -90,7 +90,7 @@ struct DictationView: View {
                     .font(.headline)
                     .foregroundStyle(.green)
                 if let seconds = controller.lastDuration {
-                    Text("Распознано за \(Self.seconds(seconds)) c")
+                    Text("Распознано за \(DecimalComma.string(seconds)) c")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -148,11 +148,6 @@ struct DictationView: View {
     private static func clock(_ seconds: TimeInterval) -> String {
         let total = Int(seconds)
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-
-    /// 3,8 — десятичная запятая.
-    private static func seconds(_ value: TimeInterval) -> String {
-        String(format: "%.1f", value).replacingOccurrences(of: ".", with: ",")
     }
 }
 

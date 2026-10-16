@@ -44,7 +44,7 @@ struct BenchView: View {
                 HStack {
                     Text(phrase.title)
                     Spacer()
-                    Text("\(Self.formatted(phrase.seconds)) c").foregroundStyle(.secondary)
+                    Text("\(DecimalComma.string(phrase.seconds)) c").foregroundStyle(.secondary)
                 }
             }
             .onDelete { runner.removePhrases(at: $0) }
@@ -65,7 +65,7 @@ struct BenchView: View {
             }
         } label: {
             if phraseRecorder.isRecording {
-                Label("Стоп — \(Self.formatted(phraseRecorder.elapsed)) c", systemImage: "stop.fill")
+                Label("Стоп — \(DecimalComma.string(phraseRecorder.elapsed)) c", systemImage: "stop.fill")
                     .foregroundStyle(.red)
             } else {
                 Label("Записать фразу", systemImage: "mic.fill")
@@ -111,10 +111,6 @@ struct BenchView: View {
             Text("Замерено на этом телефоне")
         }
     }
-
-    private static func formatted(_ value: Double) -> String {
-        String(format: "%.1f", value).replacingOccurrences(of: ".", with: ",")
-    }
 }
 
 /// Одна строка таблицы: модель, длина фразы, время распознавания (выделено, если больше 5 c),
@@ -127,14 +123,14 @@ private struct BenchRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(row.model).font(.headline)
             HStack {
-                Text("Фраза \(Self.formatted(row.audioSeconds)) c")
+                Text("Фраза \(DecimalComma.string(row.audioSeconds)) c")
                 Spacer()
-                Text("Распознано за \(Self.formatted(row.transcribeSeconds)) c")
+                Text("Распознано за \(DecimalComma.string(row.transcribeSeconds)) c")
                     .fontWeight(isSlow ? .bold : .regular)
                     .foregroundStyle(isSlow ? .red : .primary)
             }
             .font(.footnote)
-            Text(row.peakMemoryMB.map { "Пик памяти: \(Int($0)) МБ" } ?? "Пик памяти: не замерено")
+            Text(row.peakMemoryMB.map { "Пик памяти: \(DecimalComma.string($0, digits: 0)) МБ" } ?? "Пик памяти: не замерено")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Text(row.text)
@@ -142,9 +138,5 @@ private struct BenchRowView: View {
                 .textSelection(.enabled)
         }
         .padding(.vertical, 4)
-    }
-
-    private static func formatted(_ value: Double) -> String {
-        String(format: "%.1f", value).replacingOccurrences(of: ".", with: ",")
     }
 }

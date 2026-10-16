@@ -29,17 +29,12 @@ public enum BenchReport {
             "|---|---|---|---|---|",
         ]
         for row in rows {
-            let memory = row.peakMemoryMB.map { number($0, digits: 0) } ?? "не замерено"
-            let audio = number(row.audioSeconds, digits: 1)
-            let transcribe = number(row.transcribeSeconds, digits: 1)
+            let memory = row.peakMemoryMB.map { DecimalComma.string($0, digits: 0) } ?? "не замерено"
+            let audio = DecimalComma.string(row.audioSeconds)
+            let transcribe = DecimalComma.string(row.transcribeSeconds)
             lines.append("| \(cell(row.model)) | \(audio) | \(transcribe) | \(memory) | \(cell(row.text)) |")
         }
         return lines.joined(separator: "\n") + "\n"
-    }
-
-    /// Десятичная запятая, как принято в русском тексте.
-    private static func number(_ value: Double, digits: Int) -> String {
-        String(format: "%.\(digits)f", value).replacingOccurrences(of: ".", with: ",")
     }
 
     private static func cell(_ text: String) -> String {

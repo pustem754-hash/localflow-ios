@@ -6,8 +6,11 @@ struct ModelsView: View {
     // Значение по умолчанию вычисляется при создании вкладки в TabView — то есть при запуске
     // приложения: так `ModelStore` сразу проверяет общие файлы iTunes и грузит выбранную модель.
     @ObservedObject private var store = ModelStore.shared
+    /// Пока идёт «Замер», в движке его модели: «Выбрать» и «Удалить» неактивны.
+    @ObservedObject private var dictation = DictationController.shared
     @State private var downloading: [ModelInfo.ID: Double] = [:]
     @State private var importing = false
+    @State private var verifyingImport = false
     @State private var pendingDelete: ModelInfo?
     @State private var errorText: String?
     @State private var infoText: String?
@@ -20,10 +23,17 @@ struct ModelsView: View {
                     ForEach(store.catalog) { model in row(model) }
                 }
                 Section {
-                    Button {
-                        importing = true
-                    } label: {
-                        Label("Импорт из Файлов", systemImage: "folder")
+                    if verifyingImport {
+                        HStack {
+                            ProgressView()
+                            Text("Проверяю файл (sha256)…")
+                        }
+                    } else {
+                        Button {
+                            importing = true
+                        } label: {
+                            Label("Импорт из Файлов", systemImage: "folder")
+                        }
                     }
                 } header: {
                     Text("Без интернета")
@@ -50,7 +60,7 @@ struct ModelsView: View {
                 }
             }
             .navigationTitle("Модели")
-            .onAppear { store.adoptSharedFiles() }
+            .onAppear { Task { await store.adoptSharedFiles() } }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.data],
                           allowsMultipleSelection: false) { result in
                 handleImport(result)
@@ -65,10 +75,11 @@ struct ModelsView: View {
                 }
             }
             .alert("Не получилось",
-                   isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
+                   isPresented: Binding(get: { errorText != nil || store.sharedFileError != nil },
+                                        set: { if !$0 { errorText = nil; store.sharedFileError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(errorText ?? "")
+                Text(errorText ?? store.sharedFileError ?? "")
             }
             .alert("Готово",
                    isPresented: Binding(get: { infoText != nil }, set: { if !$0 { infoText = nil } })) {
@@ -81,6 +92,17 @@ struct ModelsView: View {
 
     @ViewBuilder private var engineSection: some View {
         Section("В движке") {
+            if dictation.isBenchRunning {
+                Text("Идёт «Замер» — модели грузятся по очереди; выбранная вернётся после него.")
+                    .foregroundStyle(.secondary)
+            } else {
+                engineStateRow
+            }
+        }
+    }
+
+    @ViewBuilder private var engineStateRow: some View {
+        Group {
             switch store.engineState {
             case .empty:
                 Text("Модель не выбрана — скачай или импортируй и нажми «Выбрать».")
@@ -119,11 +141,13 @@ struct ModelsView: View {
                 HStack(spacing: 16) {
                     if store.selected != model.id {
                         Button("Выбрать") { Task { await store.select(model) } }
+                            .disabled(dictation.isBenchRunning)
                     } else {
                         Text("Выбрана").foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button("Удалить", role: .destructive) { pendingDelete = model }
+                        .disabled(dictation.isBenchRunning)
                 }
                 .buttonStyle(.borderless)
             } else {
@@ -159,11 +183,15 @@ struct ModelsView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            do {
-                let model = try store.importFile(at: url)
-                infoText = "\(model.title) импортирована."
-            } catch {
-                errorText = error.localizedDescription
+            verifyingImport = true
+            Task {
+                do {
+                    let model = try await store.importFile(at: url)
+                    infoText = "\(model.title) импортирована и проверена."
+                } catch {
+                    errorText = error.localizedDescription
+                }
+                verifyingImport = false
             }
         case .failure(let error):
             errorText = error.localizedDescription

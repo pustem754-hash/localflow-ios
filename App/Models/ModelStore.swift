@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import UIKit
 
@@ -5,6 +6,7 @@ enum ModelStoreError: LocalizedError {
     case noInternet(ModelInfo)
     case downloadFailed(ModelInfo, String)
     case sizeMismatch(ModelInfo, got: Int64)
+    case hashMismatch(ModelInfo)
     case notInCatalog(name: String, bytes: Int64)
     case fileFailed(String)
 
@@ -25,6 +27,9 @@ enum ModelStoreError: LocalizedError {
         case .sizeMismatch(let m, let got):
             return "\(m.fileName) скачался не целиком или не тот: \(ModelInfo.formatBytes(got)) байт вместо "
                 + "\(ModelInfo.formatBytes(m.bytes)). Файл удалён — можно повторить.\n\n" + Self.offlineHint(m)
+        case .hashMismatch(let m):
+            return "\(m.fileName) не прошёл проверку: содержимое не совпало с оригиналом на Hugging Face "
+                + "(sha256). Файл не принят — скачай его заново.\n\n" + Self.offlineHint(m)
         case .notInCatalog(let name, let bytes):
             return "Это не модель из списка: нужен один из файлов\n\(ModelInfo.catalogListText)\n\n"
                 + "У файла «\(name)» — \(ModelInfo.formatBytes(bytes)) байт."
@@ -59,10 +64,13 @@ final class ModelStore: ObservableObject {
     @Published private(set) var selected: ModelInfo.ID?
     @Published private(set) var engineState: EngineState = .empty
     @Published private(set) var unrecognizedSharedFiles: [UnrecognizedFile] = []
+    /// Файл из общих файлов iTunes не прошёл проверку sha256 — текст для экрана «Модели».
+    @Published var sharedFileError: String?
 
     private let fm = FileManager.default
     private let selectedKey = "selectedModelID"
     private var activeObserver: NSObjectProtocol?
+    private var isAdopting = false
 
     let modelsDirectory: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -81,18 +89,19 @@ final class ModelStore: ObservableObject {
         try? dir.setResourceValues(values)
 
         refreshDownloaded()
-        adoptSharedFiles()
-        if let id = UserDefaults.standard.string(forKey: selectedKey), downloaded.contains(id) {
-            selected = id
-        }
         // При каждом возвращении в приложение — снова проверить общие файлы iTunes.
         activeObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.adoptSharedFiles() }
+            Task { @MainActor in await self?.adoptSharedFiles() }
         }
-        if selected != nil {
-            Task { await loadSelected() }
+        // Сначала общие файлы (хэш считается вне главного потока), потом выбранная модель — в движок.
+        Task {
+            await adoptSharedFiles()
+            if selected == nil, let id = UserDefaults.standard.string(forKey: selectedKey), downloaded.contains(id) {
+                selected = id
+                await loadSelected()
+            }
         }
     }
 
@@ -112,16 +121,38 @@ final class ModelStore: ObservableObject {
         downloaded = Set(catalog.filter { fileSize(fileURL(for: $0)) == $0.bytes }.map(\.id))
     }
 
-    /// Кладёт файл на место модели: прежний файл с тем же именем заменяется.
-    private func place(_ source: URL, as model: ModelInfo, move: Bool) throws {
+    /// Переносит проверенный файл на место модели: прежний файл с тем же именем заменяется.
+    private func place(_ source: URL, as model: ModelInfo) throws {
         let dest = fileURL(for: model)
         do {
             if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
-            if move { try fm.moveItem(at: source, to: dest) } else { try fm.copyItem(at: source, to: dest) }
+            try fm.moveItem(at: source, to: dest)
         } catch {
             throw ModelStoreError.fileFailed(error.localizedDescription)
         }
         refreshDownloaded()
+    }
+
+    /// sha256 файла против каталога; считается вне главного потока. Не совпало — файл удаляется.
+    private func verify(_ file: URL, as model: ModelInfo) async throws {
+        let hash = try? await Task.detached(priority: .userInitiated) { try ModelStore.sha256Hex(of: file) }.value
+        guard hash == model.sha256 else {
+            try? fm.removeItem(at: file)
+            throw ModelStoreError.hashMismatch(model)
+        }
+    }
+
+    /// Читает файл кусками по 4 МБ — модель целиком в память не попадает.
+    nonisolated private static func sha256Hex(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let chunk = try autoreleasepool { try handle.read(upToCount: 4 << 20) }
+            guard let chunk, !chunk.isEmpty else { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: Скачивание — единственный сетевой вызов приложения (R42, R43)
@@ -148,7 +179,8 @@ final class ModelStore: ObservableObject {
             try? fm.removeItem(at: partial)
             throw ModelStoreError.sizeMismatch(model, got: got)
         }
-        try place(partial, as: model, move: true)
+        try await verify(partial, as: model)
+        try place(partial, as: model)
     }
 
     private static func describe(_ error: Error, model: ModelInfo) -> Error {
@@ -170,9 +202,18 @@ final class ModelStore: ObservableObject {
 
     // MARK: Импорт
 
-    /// Файл из «Файлов»: опознаётся по точному размеру и копируется в модели.
+    /// Файл из «Файлов»: опознаётся по точному размеру, копируется к себе и проверяется по sha256.
+    /// Хэш не совпал — удаляется копия, оригинал в «Файлах» не трогается.
     @discardableResult
-    func importFile(at url: URL) throws -> ModelInfo {
+    func importFile(at url: URL) async throws -> ModelInfo {
+        let copy = modelsDirectory.appendingPathComponent(UUID().uuidString + ".import")
+        let model = try copyForImport(url, to: copy)
+        try await verify(copy, as: model)
+        try place(copy, as: model)
+        return model
+    }
+
+    private func copyForImport(_ url: URL, to copy: URL) throws -> ModelInfo {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let bytes = fileSize(url) else {
@@ -181,23 +222,40 @@ final class ModelStore: ObservableObject {
         guard let model = ModelInfo.identify(bytes: bytes, in: catalog) else {
             throw ModelStoreError.notInCatalog(name: url.lastPathComponent, bytes: bytes)
         }
-        try place(url, as: model, move: false)
+        do {
+            try fm.copyItem(at: url, to: copy)
+        } catch {
+            try? fm.removeItem(at: copy)
+            throw ModelStoreError.fileFailed(error.localizedDescription)
+        }
         return model
     }
 
-    /// `.bin` в корне Documents (туда кладёт общий доступ iTunes): опознанные переносятся в модели,
+    /// `.bin` в корне Documents (туда кладёт общий доступ iTunes): опознанные по размеру проверяются
+    /// по sha256 и переносятся в модели; не прошедшие проверку удаляются, причина — в `sharedFileError`;
     /// неопознанные остаются на месте и попадают в `unrecognizedSharedFiles`.
     @discardableResult
-    func adoptSharedFiles() -> [ModelInfo] {
+    func adoptSharedFiles() async -> [ModelInfo] {
+        guard !isAdopting else { return [] }
+        isAdopting = true
+        defer { isAdopting = false }
         let files = (try? fm.contentsOfDirectory(at: documentsDirectory, includingPropertiesForKeys: [.fileSizeKey]))
             ?? []
         var adopted: [ModelInfo] = []
         var unknown: [UnrecognizedFile] = []
         for file in files where file.pathExtension.lowercased() == "bin" {
             guard let bytes = fileSize(file) else { continue }
-            if let model = ModelInfo.identify(bytes: bytes, in: catalog), (try? place(file, as: model, move: true)) != nil {
+            guard let model = ModelInfo.identify(bytes: bytes, in: catalog) else {
+                unknown.append(UnrecognizedFile(name: file.lastPathComponent, bytes: bytes))
+                continue
+            }
+            do {
+                try await verify(file, as: model)
+                try place(file, as: model)
                 adopted.append(model)
-            } else {
+            } catch ModelStoreError.hashMismatch(let m) {
+                sharedFileError = ModelStoreError.hashMismatch(m).localizedDescription
+            } catch {
                 unknown.append(UnrecognizedFile(name: file.lastPathComponent, bytes: bytes))
             }
         }
@@ -230,9 +288,12 @@ final class ModelStore: ObservableObject {
     }
 
     /// Загружает выбранную модель в `WhisperEngine.shared`. Ошибка — в `engineState`, без падения.
+    /// Модель не выбрана — движок выгружается (так и после «Замера»).
+    /// `.loaded` ставится, только если в движке правда эта модель (`WhisperEngine.loadedModelID`).
     func loadSelected() async {
         guard let id = selected, let model = catalog.first(where: { $0.id == id }), isDownloaded(model) else {
             engineState = .empty
+            await WhisperEngine.shared.unload()
             return
         }
         guard let vad = WhisperEngine.bundledVAD else {
@@ -241,8 +302,10 @@ final class ModelStore: ObservableObject {
         }
         engineState = .loading(model.title)
         do {
-            try await WhisperEngine.shared.load(model: fileURL(for: model), vad: vad)
-            if selected == id { engineState = .loaded(id) }
+            try await WhisperEngine.shared.load(model: fileURL(for: model), vad: vad, id: id)
+            // Другая модель в движке — значит, следом идёт ещё одна загрузка, она и поставит состояние.
+            let inEngine = await WhisperEngine.shared.loadedModelID
+            if selected == id, inEngine == id { engineState = .loaded(id) }
         } catch {
             if selected == id { engineState = .failed("Модель не загрузилась: \(error.localizedDescription)") }
         }

@@ -7,6 +7,7 @@ enum EngineError: LocalizedError {
     case fileMissing(String)
     case initFailed(String)
     case transcribeFailed(Int32)
+    case wrongModel
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum EngineError: LocalizedError {
             return "\(name): файл битый или не хватило памяти."
         case .transcribeFailed(let code):
             return "Whisper не смог распознать запись (код \(code))."
+        case .wrongModel:
+            return "В движке сейчас другая модель — подожди, пока загрузится выбранная, и повтори."
         }
     }
 }
@@ -35,11 +38,14 @@ actor WhisperEngine {
 
     private var context: OpaquePointer?
     private var vadPath: String?
+    /// `ModelInfo.ID` модели, которая сейчас в контексте; `nil` — пусто.
+    private(set) var loadedModelID: String?
 
     var isLoaded: Bool { context != nil }
 
     /// Выгружает прежнюю модель до загрузки новой — в памяти никогда не две.
-    func load(model: URL, vad: URL) throws {
+    /// `id` — `ModelInfo.ID` загружаемой модели, по нему вызывающие сверяют, что в движке.
+    func load(model: URL, vad: URL, id: String) throws {
         unload()
         let fm = FileManager.default
         guard fm.fileExists(atPath: model.path) else { throw EngineError.fileMissing(model.lastPathComponent) }
@@ -54,18 +60,22 @@ actor WhisperEngine {
         }
         context = ctx
         vadPath = vad.path
+        loadedModelID = id
     }
 
     func unload() {
         if let context { whisper_free(context) }
         context = nil
         vadPath = nil
+        loadedModelID = nil
     }
 
     /// 16 кГц mono Float → текст. Клип короче `ASRSettings.minSamples` — пустая строка без вызова модели.
-    func transcribe(_ samples: [Float]) async throws -> String {
+    /// `expectedModel` задан и в движке другая модель — `EngineError.wrongModel`, распознавания нет.
+    func transcribe(_ samples: [Float], expectedModel: String? = nil) async throws -> String {
         if samples.count < ASRSettings.minSamples { return "" }
         guard let context, let vadPath else { throw EngineError.notLoaded }
+        if let expectedModel, expectedModel != loadedModelID { throw EngineError.wrongModel }
 
         var params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH)
         params.beam_search.beam_size = Int32(ASRSettings.beamSize)
@@ -80,6 +90,8 @@ actor WhisperEngine {
         params.vad = true
         params.vad_params.threshold = ASRSettings.vadThreshold
         params.vad_params.min_silence_duration_ms = Int32(ASRSettings.vadMinSilenceMs)
+        params.vad_params.speech_pad_ms = Int32(ASRSettings.vadSpeechPadMs)
+        params.vad_params.min_speech_duration_ms = Int32(ASRSettings.vadMinSpeechMs)
 
         let code: Int32 = ASRSettings.language.withCString { language in
             ASRSettings.initialPrompt.withCString { prompt in
@@ -95,13 +107,14 @@ actor WhisperEngine {
         }
         if code != 0 { throw EngineError.transcribeFailed(code) }
 
-        var text = ""
+        // Как asr.py:95 LocalFlow: `" ".join(s.text.strip() for s in segments).strip()`.
+        var parts: [String] = []
         for i in 0..<whisper_full_n_segments(context) {
             if let segment = whisper_full_get_segment_text(context, i) {
-                text += String(cString: segment)
+                parts.append(String(cString: segment).trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     deinit {

@@ -11,8 +11,9 @@ struct BenchPhrase: Identifiable {
 }
 
 /// «Замер»: каждая фраза × каждая скачанная модель, модели грузятся по одной в `WhisperEngine.shared`.
-/// Пока идёт прогон, `DictationController.shared.isBenchRunning = true`; после — всегда `false`
-/// и `ModelStore.shared.loadSelected()`, в том числе при ошибке и отмене.
+/// Пока идёт прогон, `DictationController.shared.isBenchRunning = true`; после — всегда
+/// `ModelStore.shared.loadSelected()` (без выбранной модели он выгружает движок) и только затем `false`,
+/// в том числе при ошибке и отмене.
 @MainActor
 final class BenchRunner: ObservableObject {
     @Published private(set) var phrases: [BenchPhrase] = []
@@ -48,14 +49,13 @@ final class BenchRunner: ObservableObject {
         DictationController.shared.isBenchRunning = true
 
         runTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer {
-                DictationController.shared.isBenchRunning = false
-                self.statusText = nil
-                self.isRunning = false
-                Task { await ModelStore.shared.loadSelected() }
-            }
-            await self.runLoop(models: models, phrases: phrasesSnapshot)
+            await self?.runLoop(models: models, phrases: phrasesSnapshot)
+            self?.statusText = "Возвращаю выбранную модель…"
+            // Диктовка снова доступна, только когда в движке выбранная модель (или он пуст).
+            await ModelStore.shared.loadSelected()
+            DictationController.shared.isBenchRunning = false
+            self?.statusText = nil
+            self?.isRunning = false
         }
     }
 
@@ -74,7 +74,7 @@ final class BenchRunner: ObservableObject {
             if Task.isCancelled { return }
             statusText = "Загружаю \(model.title)…"
             do {
-                try await WhisperEngine.shared.load(model: store.fileURL(for: model), vad: vad)
+                try await WhisperEngine.shared.load(model: store.fileURL(for: model), vad: vad, id: model.id)
             } catch {
                 rows.append(BenchRow(model: model.title, audioSeconds: 0, transcribeSeconds: 0,
                                       peakMemoryMB: nil,
@@ -84,7 +84,7 @@ final class BenchRunner: ObservableObject {
             for phrase in phrases {
                 if Task.isCancelled { return }
                 statusText = "\(model.title): \(phrase.title)…"
-                let result = await measure(phrase.samples)
+                let result = await measure(phrase.samples, model: model)
                 rows.append(BenchRow(model: model.title, audioSeconds: phrase.seconds,
                                       transcribeSeconds: result.seconds, peakMemoryMB: result.peakMB,
                                       text: result.text))
@@ -93,12 +93,13 @@ final class BenchRunner: ObservableObject {
     }
 
     /// Распознаёт фразу текущей моделью; пик памяти — максимум `MemoryProbe.currentMB()` за время распознавания.
-    private func measure(_ samples: [Float]) async -> (text: String, seconds: Double, peakMB: Double?) {
+    /// Движок сверяет, что в нём именно `model`: чужая модель — строка с ошибкой, а не чужие цифры.
+    private func measure(_ samples: [Float], model: ModelInfo) async -> (text: String, seconds: Double, peakMB: Double?) {
         let start = Date()
         let tracker = PeakMemoryTracker()
         tracker.start()
         do {
-            let text = try await WhisperEngine.shared.transcribe(samples)
+            let text = try await WhisperEngine.shared.transcribe(samples, expectedModel: model.id)
             return (text, Date().timeIntervalSince(start), tracker.stop())
         } catch {
             return ("Ошибка распознавания: \(error.localizedDescription)", Date().timeIntervalSince(start), tracker.stop())
