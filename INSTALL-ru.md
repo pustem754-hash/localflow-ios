@@ -97,13 +97,15 @@ iOS 26.6.1 попадает в группу «18.0+» документации S
    действительно ставит не только себя: faq называет лимит «can only install 3 apps
    (including itself) at a time... only 10 different apps may be installed in a week».
    Появится (ожидаемо, кнопка не проверена по этим страницам): иконка **LocalFlow** на
-   экране «Домой».
+   экране «Домой». Если кнопка не нашлась или SideStore не принимает файл — запасной
+   путь: раздел **B (Sideloadly)** ниже, там шаг установки описан официальной страницей
+   полностью.
 3. Если при первом открытии LocalFlow появится предупреждение о ненадёжном разработчике —
    повтори шаг A.3.1–A.3.3 (доверие профилю в «VPN и управление устройством»).
 
 ### A.5 Продление
 
-Источники: `docs.sidestore.io/docs/faq`, спецификация §5.4.
+Источники: `docs.sidestore.io/docs/faq`.
 
 1. SideStore сам продлевает приложения в фоне — «will periodically "refresh" your apps in
    the background, to keep their normal 7-day development period from expiring» (faq).
@@ -113,7 +115,9 @@ iOS 26.6.1 попадает в группу «18.0+» документации S
    этого не нужен.
 3. Файл сопряжения, который SideStore получил при установке через iloader, может слететь
    после обновления или сброса iPhone — тогда шаги A.2–A.3 придётся повторить с
-   компьютером (факт и источник — спецификация §5.4, со ссылкой на docs.sidestore.io).
+   компьютером: «Your pairing file may expire and need to be reimported if you update or
+   reset your iPhone, iPad, or iPod touch. This also occurs at random times.»
+   (docs.sidestore.io/docs/advanced/pairing-file).
 4. Лимит бесплатного Apple ID: не больше **3 приложений одновременно** (считая сам
    SideStore) и не больше **10 разных приложений в неделю** (faq).
 

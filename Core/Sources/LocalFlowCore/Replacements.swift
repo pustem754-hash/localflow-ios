@@ -170,7 +170,7 @@ public struct Replacements: Equatable, Sendable {
         }
     }
 
-    // Дословная копия C:\Users\localflow\replacements.yaml.
+    // Дословная копия replacements.yaml десктопной версии LocalFlow.
     private static let localFlowYAML = """
     # Словарь замен LocalFlow: применяется к тексту Whisper до LLM-очистки.
     # Формат: одна строка — одна замена.  "как пишет Whisper": "как надо"

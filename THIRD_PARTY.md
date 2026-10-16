@@ -126,7 +126,7 @@ SOFTWARE.
   format for use with whisper.cpp». Конвертация и квантование не меняют лицензию: MIT это
   разрешает (изменение, слияние, распространение).
 - Три файла, которые скачивает экран «Модели» (имя, точный размер в байтах и sha256 —
-  `App/Models/ModelInfo.swift`, §6 спецификации); ссылка закреплена на коммит репозитория
+  `App/Models/ModelInfo.swift`); ссылка закреплена на коммит репозитория
   `ggerganov/whisper.cpp` на Hugging Face, не на `main`, — чтобы файл по ссылке не менялся:
   - `ggml-small.bin` — 487 601 967 байт, sha256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`
   - `ggml-medium-q5_0.bin` — 539 212 467 байт, sha256 `19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f`
