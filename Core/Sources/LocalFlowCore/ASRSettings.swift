@@ -8,5 +8,6 @@ public enum ASRSettings {
         + "как дела? Всё хорошо, спасибо. Ещё раз — ясно, "
         + "чётко, с запятыми и точками."
     public static let vadThreshold: Float = 0.3, vadMinSilenceMs = 500
+    public static let vadSpeechPadMs = 30, vadMinSpeechMs = 250   // ЗАГЛУШКА: сейчас в движке значения whisper.cpp
     public static let minSamples = 1600        // < 0,1 c — не распознаём, как asr.py
 }
