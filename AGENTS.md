@@ -1,18 +1,50 @@
 <!-- autopilot:start -->
 # LocalFlow для iPhone
 
-Офлайн-диктовка на русском для iPhone 11: нажал кнопку, сказал фразу — текст с пунктуацией в буфере обмена. Для Рустема, бесплатно, сборка с Windows.
+Офлайн-диктовка на русском для iPhone 11: нажал кнопку, сказал фразу — текст с пунктуацией в буфере обмена. Для владельца репозитория, бесплатно, сборка с Windows.
 
-## Команды
+Репозиторий публичный: `github.com/pustem754-hash/localflow-ios`, ветка `main`.
 
-| Команда | Что делает |
-|---------|------------|
+## Где что лежит
+
+- Архитектура, поток данных, границы модулей — `docs/architecture.md`.
+- Решения и почему так — `docs/adr/0001`…`0006`.
+- Словарь терминов проекта — `CONTEXT.md`.
+- Логика без iOS (фильтры, проверки длительности, замены) — `Core/Sources/LocalFlowCore`, тесты — `Core/Tests/LocalFlowCoreTests`.
+- iOS-приложение (SwiftUI) — `App/`; сборка собирается из него через `project.yml` (XcodeGen).
+- Как собрать и поставить на телефон — `README.md`, `INSTALL-ru.md`; что проверить на телефоне — `CHECKS-ru.md`.
+- Открытые зависимости и лицензии — `THIRD_PARTY.md`.
+
+## Как проверить (локально Swift нет — только CI)
+
+```sh
+git push origin main
+gh run list -R pustem754-hash/localflow-ios --limit 10
+gh run watch <id> -R pustem754-hash/localflow-ios --exit-status   # core-tests и ios-build — отдельные id
+```
+
+Зелёные `core-tests` и `ios-build` на `HEAD` — проверка пройдена. Красный — `gh run view <id> --log-failed -R pustem754-hash/localflow-ios`, чинить, снова.
+
+Артефакт сборки — `LocalFlow.ipa` (смотреть в `gh run view <id> -R pustem754-hash/localflow-ios`, раздел Artifacts).
+
+Не проверено здесь (нужен Mac): `cd Core && swift test`; `xcodegen generate` по `project.yml` — шаги см. `.github/workflows/ios-build.yml`.
+
+## Подводные камни
+
+- На Windows нет Swift — любая проверка идёт только через GitHub Actions (`core-tests.yml`, `ios-build.yml`).
+- `whisper.xcframework` и VAD-модель (`ggml-silero-v6.2.0.bin`) кладёт `ios-build.yml` перед сборкой — в git их нет (`.gitignore`: `*.xcframework/`, `*.bin`).
+- sha256 загрузок (whisper.xcframework, VAD-модель, XcodeGen, веса Whisper) закреплён и в workflow, и в `App/Models/ModelInfo.swift` — расходиться не должны.
+- Вкладку «Модели» в `TabView` (`App/Dictation/AppNavigation.swift`) не убирать — она будит `ModelStore.shared`, без неё приложение не видит скачанные модели.
+- «Замер» (`App/Bench/BenchRunner.swift`) обязан снимать `DictationController.isBenchRunning` только после `ModelStore.shared.loadSelected()` — иначе диктовка стартует на чужой модели в движке.
+- Перевод `keepLastSeconds` (из `RecordingGuard.decide`) в отсчёты делает вызывающий код (`DictationController.finish()`), не `LocalFlowCore`.
 
 ## Как здесь работает Autopilot
 
 Сборка ведётся навыком `/autopilot`. Требования, спецификация и таски — в `.autopilot/`.
 Прогресс — `.autopilot/dashboard.html`. Требование из `manifest.md` может снять
 только пользователь. Прерванную сборку продолжает «продолжи автопилот».
+
+`.autopilot/` и `BRIEF.md` — локальные, в публичный репозиторий не попадают (`.gitignore`).
 
 ### Правка без автопилота
 
