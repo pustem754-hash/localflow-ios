@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import LocalFlowCore
 import UIKit
 
 enum ModelStoreError: LocalizedError {
@@ -7,6 +8,7 @@ enum ModelStoreError: LocalizedError {
     case downloadFailed(ModelInfo, String)
     case sizeMismatch(ModelInfo, got: Int64)
     case hashMismatch(ModelInfo)
+    case readFailed(name: String)
     case notInCatalog(name: String, bytes: Int64)
     case fileFailed(String)
 
@@ -30,6 +32,8 @@ enum ModelStoreError: LocalizedError {
         case .hashMismatch(let m):
             return "\(m.fileName) не прошёл проверку: содержимое не совпало с оригиналом на Hugging Face "
                 + "(sha256). Файл не принят — скачай его заново.\n\n" + Self.offlineHint(m)
+        case .readFailed(let name):
+            return "Не удалось прочитать файл \(name) — файл не удалён, повтори."
         case .notInCatalog(let name, let bytes):
             return "Это не модель из списка: нужен один из файлов\n\(ModelInfo.catalogListText)\n\n"
                 + "У файла «\(name)» — \(ModelInfo.formatBytes(bytes)) байт."
@@ -134,11 +138,17 @@ final class ModelStore: ObservableObject {
     }
 
     /// sha256 файла против каталога; считается вне главного потока. Не совпало — файл удаляется.
+    /// Не прочитался — файл остаётся на месте, ошибка `readFailed` («повтори»).
     private func verify(_ file: URL, as model: ModelInfo) async throws {
-        let hash = try? await Task.detached(priority: .userInitiated) { try ModelStore.sha256Hex(of: file) }.value
-        guard hash == model.sha256 else {
+        let hash = await Task.detached(priority: .userInitiated) { try? ModelStore.sha256Hex(of: file) }.value
+        switch ModelFileCheck.verdict(hash: hash, expected: model.sha256) {
+        case .ok:
+            return
+        case .mismatch:
             try? fm.removeItem(at: file)
             throw ModelStoreError.hashMismatch(model)
+        case .unreadable:
+            throw ModelStoreError.readFailed(name: model.fileName)
         }
     }
 
@@ -208,7 +218,12 @@ final class ModelStore: ObservableObject {
     func importFile(at url: URL) async throws -> ModelInfo {
         let copy = modelsDirectory.appendingPathComponent(UUID().uuidString + ".import")
         let model = try copyForImport(url, to: copy)
-        try await verify(copy, as: model)
+        do {
+            try await verify(copy, as: model)
+        } catch {
+            try? fm.removeItem(at: copy)   // своя копия; оригинал в «Файлах» цел — можно повторить
+            throw error
+        }
         try place(copy, as: model)
         return model
     }
@@ -255,6 +270,9 @@ final class ModelStore: ObservableObject {
                 adopted.append(model)
             } catch ModelStoreError.hashMismatch(let m) {
                 sharedFileError = ModelStoreError.hashMismatch(m).localizedDescription
+            } catch ModelStoreError.readFailed(let name) {
+                // файл остаётся в общих файлах — следующий вход в приложение проверит его снова
+                sharedFileError = ModelStoreError.readFailed(name: name).localizedDescription
             } catch {
                 unknown.append(UnrecognizedFile(name: file.lastPathComponent, bytes: bytes))
             }
