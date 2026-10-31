@@ -55,10 +55,6 @@ final class DictationController: ObservableObject {
                                             queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.cancelRecording(to: .failed(Self.interruptedMessage)) }
         })
-        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil,
-                                            queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.startPendingIntent() }
-        })
     }
 
     /// Модель годится для записи: загружена или ещё грузится (распознавание её дождётся).
@@ -84,6 +80,7 @@ final class DictationController: ObservableObject {
     // MARK: Кнопка
 
     func toggle() {
+        pendingIntentStart = false   // нажатие кнопки отменяет ожидающий запуск из «Команд»
         switch state {
         case .recording: finish()
         case .transcribing: return
@@ -98,17 +95,17 @@ final class DictationController: ObservableObject {
         case .recording, .transcribing: return
         default: break
         }
-        if UIApplication.shared.applicationState == .active {
-            Task { await begin() }
-        } else {
-            pendingIntentStart = true
+        pendingIntentStart = true
+        Task {
+            // Модель могла только что прийти через iTunes или ещё не выбраться после холодного запуска.
+            await store.refresh()
+            while pendingIntentStart, UIApplication.shared.applicationState != .active {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            guard pendingIntentStart else { return }
+            pendingIntentStart = false
+            await begin()
         }
-    }
-
-    private func startPendingIntent() {
-        guard pendingIntentStart else { return }
-        pendingIntentStart = false
-        Task { await begin() }
     }
 
     // MARK: Запись

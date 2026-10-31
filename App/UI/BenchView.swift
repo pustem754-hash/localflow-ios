@@ -18,6 +18,8 @@ struct BenchView: View {
                 if !runner.rows.isEmpty { resultsSection }
             }
             .navigationTitle("Замер")
+            // Модель, скопированная через iTunes, пока приложение было открыто, видна без перезапуска.
+            .task { await store.refresh() }
             .alert("Не получилось",
                    isPresented: Binding(get: { runner.errorText != nil || phraseRecorder.errorText != nil },
                                         set: { if !$0 { runner.errorText = nil; phraseRecorder.errorText = nil } })) {
@@ -89,7 +91,9 @@ struct BenchView: View {
                     .disabled(!runner.canRun)
             }
         } footer: {
-            if store.downloaded.isEmpty {
+            if store.isCheckingSharedFiles {
+                Text("Проверяю файлы из iTunes (sha256)…")
+            } else if store.downloaded.isEmpty {
                 Text("Нет ни одной скачанной модели — скачай на вкладке «Модели».")
             } else if runner.phrases.isEmpty {
                 Text("Запиши хотя бы одну фразу.")

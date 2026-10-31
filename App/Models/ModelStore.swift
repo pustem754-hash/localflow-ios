@@ -70,11 +70,14 @@ final class ModelStore: ObservableObject {
     @Published private(set) var unrecognizedSharedFiles: [UnrecognizedFile] = []
     /// Файл из общих файлов iTunes не прошёл проверку sha256 — текст для экрана «Модели».
     @Published var sharedFileError: String?
+    /// Идёт проверка общих файлов iTunes (sha256 файла 0,5 ГБ — несколько секунд).
+    @Published private(set) var isCheckingSharedFiles = false
 
     private let fm = FileManager.default
     private let selectedKey = "selectedModelID"
     private var activeObserver: NSObjectProtocol?
-    private var isAdopting = false
+    /// Проверка общих файлов одна за раз; кто пришёл во время неё — ждёт её итога.
+    private let adoption = SingleFlight<[ModelInfo]>()
 
     let modelsDirectory: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -99,14 +102,18 @@ final class ModelStore: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in await self?.adoptSharedFiles() }
         }
-        // Сначала общие файлы (хэш считается вне главного потока), потом выбранная модель — в движок.
-        Task {
-            await adoptSharedFiles()
-            if selected == nil, let id = UserDefaults.standard.string(forKey: selectedKey), downloaded.contains(id) {
-                selected = id
-                await loadSelected()
-            }
-        }
+        Task { await refresh() }
+    }
+
+    /// Общие файлы iTunes, затем сохранённый выбор модели — в движок, если модель ещё не выбрана.
+    /// Зовут запуск приложения, экран «Замер» и «Начать диктовку» из «Команд»: модель, скопированная
+    /// через iTunes только что, видна без перезапуска.
+    func refresh() async {
+        await adoptSharedFiles()
+        guard selected == nil, let id = UserDefaults.standard.string(forKey: selectedKey),
+              downloaded.contains(id) else { return }
+        selected = id
+        await loadSelected()
     }
 
     func fileURL(for model: ModelInfo) -> URL {
@@ -249,11 +256,15 @@ final class ModelStore: ObservableObject {
     /// `.bin` в корне Documents (туда кладёт общий доступ iTunes): опознанные по размеру проверяются
     /// по sha256 и переносятся в модели; не прошедшие проверку удаляются, причина — в `sharedFileError`;
     /// неопознанные остаются на месте и попадают в `unrecognizedSharedFiles`.
+    /// Вызов во время идущей проверки ждёт её итога (раньше — сразу уходил ни с чем).
     @discardableResult
     func adoptSharedFiles() async -> [ModelInfo] {
-        guard !isAdopting else { return [] }
-        isAdopting = true
-        defer { isAdopting = false }
+        await adoption.run { [weak self] in await self?.scanSharedFiles() ?? [] }
+    }
+
+    private func scanSharedFiles() async -> [ModelInfo] {
+        isCheckingSharedFiles = true
+        defer { isCheckingSharedFiles = false }
         let files = (try? fm.contentsOfDirectory(at: documentsDirectory, includingPropertiesForKeys: [.fileSizeKey]))
             ?? []
         var adopted: [ModelInfo] = []
