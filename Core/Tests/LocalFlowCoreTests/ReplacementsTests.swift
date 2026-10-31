@@ -107,6 +107,8 @@ final class ReplacementsTests: XCTestCase {
         ])
         XCTAssertEqual(repl.apply("заказ  с  Кворк ,  Клауд"), "заказ  с  Kwork ,  Клауд")
         XCTAssertEqual(Replacements(entries: [Entry(from: "  ", to: "x")]).apply("a  ,  b"), "a  ,  b")
+        // Ключ из одного пробела становился шаблоном \s+ и находился в таблице: «да , — нет» → «да ,x— нет».
+        XCTAssertEqual(Replacements(entries: [Entry(from: " ", to: "x")]).apply("да , — нет"), "да , — нет")
     }
 
     func testSpacesAroundAndInsideKeyAreNormalized() {
