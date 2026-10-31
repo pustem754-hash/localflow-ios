@@ -74,7 +74,8 @@ final class BenchRunner: ObservableObject {
             if Task.isCancelled { return }
             statusText = "Загружаю \(model.title)…"
             do {
-                try await WhisperEngine.shared.load(model: store.fileURL(for: model), vad: vad, id: model.id)
+                try await WhisperEngine.shared.load(model: store.fileURL(for: model), vad: vad, id: model.id,
+                                                    memoryOverheadBytes: model.memoryOverheadBytes)
             } catch {
                 rows.append(BenchRow(model: model.title, audioSeconds: 0, transcribeSeconds: 0,
                                       peakMemoryMB: nil,

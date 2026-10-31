@@ -342,7 +342,8 @@ final class ModelStore: ObservableObject {
         }
         engineState = .loading(model.title)
         do {
-            try await WhisperEngine.shared.load(model: fileURL(for: model), vad: vad, id: id)
+            try await WhisperEngine.shared.load(model: fileURL(for: model), vad: vad, id: id,
+                                                memoryOverheadBytes: model.memoryOverheadBytes)
             // Другая модель в движке — значит, следом идёт ещё одна загрузка, она и поставит состояние.
             let inEngine = await WhisperEngine.shared.loadedModelID
             if selected == id, inEngine == id { engineState = .loaded(id) }

@@ -6,7 +6,7 @@ import whisper
 enum EngineError: LocalizedError {
     case notLoaded
     case fileMissing(String)
-    case notEnoughMemory(name: String, neededMB: Int64, availableMB: Int64)
+    case notEnoughMemory(String)
     case initFailed(String)
     case transcribeFailed(Int32)
     case wrongModel
@@ -17,9 +17,8 @@ enum EngineError: LocalizedError {
             return "Модель не загружена — выбери её на вкладке «Модели»."
         case .fileMissing(let name):
             return "Нет файла \(name)."
-        case .notEnoughMemory(let name, let neededMB, let availableMB):
-            return "Не хватает памяти для \(name): нужно около \(neededMB) МБ, приложению доступно \(availableMB) МБ. "
-                + "Перезапусти LocalFlow или выбери модель поменьше."
+        case .notEnoughMemory(let text):
+            return text
         case .initFailed(let name):
             return "\(name): файл битый или не хватило памяти."
         case .transcribeFailed(let code):
@@ -50,7 +49,8 @@ actor WhisperEngine {
 
     /// Выгружает прежнюю модель до загрузки новой — в памяти никогда не две.
     /// `id` — `ModelInfo.ID` загружаемой модели, по нему вызывающие сверяют, что в движке.
-    func load(model: URL, vad: URL, id: String) throws {
+    /// `memoryOverheadBytes` — `ModelInfo.memoryOverheadBytes` этой модели.
+    func load(model: URL, vad: URL, id: String, memoryOverheadBytes: Int64) throws {
         unload()
         let fm = FileManager.default
         guard fm.fileExists(atPath: model.path) else { throw EngineError.fileMissing(model.lastPathComponent) }
@@ -60,10 +60,9 @@ actor WhisperEngine {
         let available = Int64(os_proc_available_memory())
         let size = try? fm.attributesOfItem(atPath: model.path)[.size] as? NSNumber
         let modelBytes = size?.int64Value ?? 0
-        guard MemoryCheck.enough(available: available, modelBytes: modelBytes) else {
-            throw EngineError.notEnoughMemory(name: model.lastPathComponent,
-                                              neededMB: MemoryCheck.requiredBytes(modelBytes: modelBytes) / 1_048_576,
-                                              availableMB: available / 1_048_576)
+        if let refusal = MemoryCheck.refusal(available: available, modelBytes: modelBytes,
+                                             overheadBytes: memoryOverheadBytes) {
+            throw EngineError.notEnoughMemory(refusal)
         }
 
         var cparams = whisper_context_default_params()
