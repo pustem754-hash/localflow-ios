@@ -1,7 +1,7 @@
 import XCTest
 import LocalFlowCore
 
-/// «Распознано за 3,8 c» — спецификация, история 6.
+/// «Распознано за 3,8 c» — десятичная запятая на экране диктовки.
 final class DecimalCommaTests: XCTestCase {
     func testOneDigitByDefault() {
         XCTAssertEqual(DecimalComma.string(3.8), "3,8")

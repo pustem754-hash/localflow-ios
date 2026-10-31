@@ -3,7 +3,7 @@ import LocalFlowCore
 
 /// Вкладка «Словарь»: список «как пишет Whisper → как надо» — добавить, изменить, удалить,
 /// вернуть словарь LocalFlow. Хранится файлом через `ReplacementsFile`; правки читает следующая
-/// диктовка без перезапуска приложения (R28).
+/// диктовка без перезапуска приложения.
 struct DictionaryView: View {
     @State private var replacements = ReplacementsFile.load()
     @State private var editingEntry: EditingEntry?

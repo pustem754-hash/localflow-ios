@@ -6,7 +6,7 @@ public enum PipelineResult: Equatable, Sendable {
 }
 
 public enum TextPipeline {
-    /// Порядок как в LocalFlow: выдумка? → паразиты → замены (R22). Пусто → .rejected(.empty).
+    /// Порядок как в LocalFlow: выдумка? → паразиты → замены. Пусто → .rejected(.empty).
     public static func process(raw: String, replacements: Replacements) -> PipelineResult {
         if isBlank(raw) {
             return .rejected(.empty)

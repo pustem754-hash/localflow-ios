@@ -23,7 +23,7 @@ enum RecorderError: LocalizedError {
 }
 
 /// Микрофон через AVAudioEngine → 16 кГц mono Float в памяти.
-/// Звук не пишется на диск и никуда не отправляется (R43): живёт в `samples` до `stop()`.
+/// Звук не пишется на диск и никуда не отправляется: живёт в `samples` до `stop()`.
 final class AudioRecorder {
     static let sampleRate: Double = 16000
 

@@ -1,7 +1,7 @@
 import XCTest
 import LocalFlowCore
 
-/// Пороги и случаи — из текущего LocalFlow main.py (`_finalize` после 16.10 01:08) и историй 10–12 spec.md.
+/// Пороги и случаи — из текущего LocalFlow main.py (`_finalize` после 16.10 01:08).
 final class RecordingGuardTests: XCTestCase {
     func testConstantsMatchLocalFlow() {
         XCTAssertEqual(RecordingGuard.minHold, 0.3)

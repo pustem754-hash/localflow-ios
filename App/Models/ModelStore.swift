@@ -12,7 +12,7 @@ enum ModelStoreError: LocalizedError {
     case notInCatalog(name: String, bytes: Int64)
     case fileFailed(String)
 
-    /// G04: имя файла и оба способа импорта.
+    /// Подсказка без интернета: имя файла и оба способа импорта.
     private static func offlineHint(_ model: ModelInfo) -> String {
         "Скачай \(model.fileName) на ноутбуке по ссылке \(model.url.absoluteString) и положи в «Файлы» "
             + "(здесь кнопка «Импорт из Файлов») или через iTunes → Общие файлы → LocalFlow. "
@@ -174,7 +174,7 @@ final class ModelStore: ObservableObject {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    // MARK: Скачивание — единственный сетевой вызов приложения (R42, R43)
+    // MARK: Скачивание — единственный сетевой вызов приложения
 
     func download(_ model: ModelInfo, progress: @escaping @MainActor (Double) -> Void) async throws {
         let partial = modelsDirectory.appendingPathComponent(model.fileName + ".download")

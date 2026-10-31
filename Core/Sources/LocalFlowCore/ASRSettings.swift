@@ -8,7 +8,7 @@ public enum ASRSettings {
         + "как дела? Всё хорошо, спасибо. Ещё раз — ясно, "
         + "чётко, с запятыми и точками."
     public static let vadThreshold: Float = 0.3, vadMinSilenceMs = 500
-    /// D02: LocalFlow их не задаёт — значения faster-whisper 1.2.1 по умолчанию (`faster_whisper/vad.py:39-43`).
+    /// LocalFlow их не задаёт (см. docs/adr/0006) — значения faster-whisper 1.2.1 по умолчанию (`faster_whisper/vad.py:39-43`).
     public static let vadSpeechPadMs = 400, vadMinSpeechMs = 0
     public static let minSamples = 1600        // < 0,1 c — не распознаём, как asr.py
 }

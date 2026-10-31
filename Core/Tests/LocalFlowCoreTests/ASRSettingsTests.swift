@@ -21,7 +21,7 @@ final class ASRSettingsTests: XCTestCase {
         XCTAssertEqual(ASRSettings.vadMinSilenceMs, 500)
     }
 
-    /// D02: LocalFlow не задаёт эти поля — берутся значения faster-whisper 1.2.1 по умолчанию
+    /// LocalFlow не задаёт эти поля (см. docs/adr/0006) — берутся значения faster-whisper 1.2.1 по умолчанию
     /// (`faster_whisper/vad.py:39-43`: `min_speech_duration_ms = 0`, `speech_pad_ms = 400`).
     func testVADDefaultsFromFasterWhisper() {
         XCTAssertEqual(ASRSettings.vadSpeechPadMs, 400)

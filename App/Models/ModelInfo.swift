@@ -17,7 +17,7 @@ struct ModelInfo: Identifiable, Equatable {
         URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/\(hfCommit)/\(fileName)")!
     }
 
-    /// Три модели для iPhone 11 (спецификация §6). Размеры и sha256 (lfs oid) — Hugging Face API.
+    /// Три модели для iPhone 11. Размеры и sha256 (lfs oid) — Hugging Face API.
     static let catalog: [ModelInfo] = [
         ModelInfo(id: "small", title: "Whisper small",
                   fileName: "ggml-small.bin", url: hf("ggml-small.bin"), bytes: 487_601_967,

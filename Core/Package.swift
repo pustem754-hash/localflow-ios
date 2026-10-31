@@ -1,5 +1,5 @@
 // swift-tools-version:5.10
-// Ядро LocalFlow: логика, которую можно проверить без iPhone (R41). Только Foundation.
+// Ядро LocalFlow: логика, которую можно проверить без iPhone. Только Foundation.
 import PackageDescription
 
 let package = Package(

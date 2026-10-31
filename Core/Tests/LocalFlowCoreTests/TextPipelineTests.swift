@@ -1,7 +1,7 @@
 import XCTest
 import LocalFlowCore
 
-/// Порядок как в LocalFlow main.py `_finalize`: выдумка? → паразиты → замены (R22, R23).
+/// Порядок как в LocalFlow main.py `_finalize`: выдумка? → паразиты → замены.
 final class TextPipelineTests: XCTestCase {
     func testFillersThenReplacements() {
         XCTAssertEqual(TextPipeline.process(raw: "эм, перезапусти Аламу", replacements: .defaults),

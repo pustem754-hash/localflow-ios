@@ -3,7 +3,7 @@ import UIKit
 import LocalFlowCore
 
 /// Вкладка «Замер»: записать свои фразы, прогнать каждую через каждую скачанную модель и
-/// показать таблицу время/память/текст (истории 26–29, 29a).
+/// показать таблицу время/память/текст.
 struct BenchView: View {
     @StateObject private var runner = BenchRunner()
     @StateObject private var phraseRecorder = PhraseRecorder()

@@ -1,6 +1,6 @@
 import AppIntents
 
-/// Действие «Начать диктовку» в «Командах» (R26): открывает LocalFlow и сразу начинает запись.
+/// Действие «Начать диктовку» в «Командах»: открывает LocalFlow и сразу начинает запись.
 /// Запись идёт только с приложением на экране — фоновую запись (`AudioRecordingIntent`) в эту сборку не берём.
 struct StartDictationIntent: AppIntent {
     static let title: LocalizedStringResource = "Начать диктовку"

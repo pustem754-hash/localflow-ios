@@ -13,7 +13,7 @@ final class DictationController: ObservableObject {
 
     @Published private(set) var state: DictationState = .idle
     @Published private(set) var lastText: String?
-    /// От второго нажатия до текста в буфере (R09.1).
+    /// От второго нажатия до текста в буфере.
     @Published private(set) var lastDuration: TimeInterval?
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var level: Float = 0
@@ -22,7 +22,7 @@ final class DictationController: ObservableObject {
 
     static let copiedOnReturnNote = "Распознано, пока LocalFlow был в фоне, — скопировано при возврате в приложение."
 
-    /// Таск 04 («Замер»): пока `true`, диктовка не запускается — в `WhisperEngine.shared` может быть чужая модель.
+    /// «Замер»: пока `true`, диктовка не запускается — в `WhisperEngine.shared` может быть чужая модель.
     /// Идущая запись при включении флага отменяется без распознавания.
     @Published var isBenchRunning = false {
         didSet {
@@ -48,7 +48,7 @@ final class DictationController: ObservableObject {
         }
 
         let center = NotificationCenter.default
-        // R39.1: звонок, Siri, другой звук — запись останавливается, ничего не копируется.
+        // Звонок, Siri, другой звук — запись останавливается, ничего не копируется.
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil,
                                             queue: .main) { [weak self] note in
             let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
