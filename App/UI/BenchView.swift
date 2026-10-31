@@ -106,7 +106,7 @@ struct BenchView: View {
                 BenchRowView(row: row)
             }
             Button("Скопировать таблицу") {
-                UIPasteboard.general.string = BenchReport.markdown(runner.rows, device: DeviceInfo.machineIdentifier)
+                Clipboard.copy(BenchReport.markdown(runner.rows, device: DeviceInfo.machineIdentifier))
             }
         } header: {
             Text("Замерено на этом телефоне")
