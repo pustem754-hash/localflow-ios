@@ -1,10 +1,12 @@
 import Foundation
 import LocalFlowCore
+import os
 import whisper
 
 enum EngineError: LocalizedError {
     case notLoaded
     case fileMissing(String)
+    case notEnoughMemory(name: String, neededMB: Int64, availableMB: Int64)
     case initFailed(String)
     case transcribeFailed(Int32)
     case wrongModel
@@ -15,6 +17,9 @@ enum EngineError: LocalizedError {
             return "Модель не загружена — выбери её на вкладке «Модели»."
         case .fileMissing(let name):
             return "Нет файла \(name)."
+        case .notEnoughMemory(let name, let neededMB, let availableMB):
+            return "Не хватает памяти для \(name): нужно около \(neededMB) МБ, приложению доступно \(availableMB) МБ. "
+                + "Перезапусти LocalFlow или выбери модель поменьше."
         case .initFailed(let name):
             return "\(name): файл битый или не хватило памяти."
         case .transcribeFailed(let code):
@@ -50,6 +55,16 @@ actor WhisperEngine {
         let fm = FileManager.default
         guard fm.fileExists(atPath: model.path) else { throw EngineError.fileMissing(model.lastPathComponent) }
         guard fm.fileExists(atPath: vad.path) else { throw EngineError.fileMissing(vad.lastPathComponent) }
+
+        // Прежняя модель уже выгружена — сколько осталось до предела, после которого iOS закрывает приложение.
+        let available = Int64(os_proc_available_memory())
+        let size = try? fm.attributesOfItem(atPath: model.path)[.size] as? NSNumber
+        let modelBytes = size?.int64Value ?? 0
+        guard MemoryCheck.enough(available: available, modelBytes: modelBytes) else {
+            throw EngineError.notEnoughMemory(name: model.lastPathComponent,
+                                              neededMB: MemoryCheck.requiredBytes(modelBytes: modelBytes) / 1_048_576,
+                                              availableMB: available / 1_048_576)
+        }
 
         var cparams = whisper_context_default_params()
 #if targetEnvironment(simulator)
