@@ -42,6 +42,13 @@ final class RecordingGuardTests: XCTestCase {
         XCTAssertEqual(RecordingGuard.decide(hold: 5.0, audio: 3.0), .transcribe(keepLastSeconds: nil))
     }
 
+    func testLostMinBoundaryIsExactlyOneAndHalfSeconds() {
+        // Два других условия потери выполнены (разница 3,5 c > 1 c, записано < 75 %) — решает только 1,5 c.
+        XCTAssertEqual(RecordingGuard.decide(hold: 5.0, audio: 1.5), .transcribe(keepLastSeconds: nil))
+        XCTAssertEqual(RecordingGuard.decide(hold: 5.0, audio: 1.49),
+                       .reject(.lostAudio(hold: 5.0, audio: 1.49)))
+    }
+
     func testNormalRecordingIsTranscribed() {
         XCTAssertEqual(RecordingGuard.decide(hold: 5.0, audio: 4.9), .transcribe(keepLastSeconds: nil))
     }

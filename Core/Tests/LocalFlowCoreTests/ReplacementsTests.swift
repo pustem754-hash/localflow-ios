@@ -57,6 +57,17 @@ final class ReplacementsTests: XCTestCase {
         XCTAssertEqual(Replacements.defaults.apply("спроси Клауд"), "спроси Claude")
     }
 
+    func testLongerPhraseWinsEvenIfListedAfterShorter() {
+        // В словаре LocalFlow длинная фраза и так стоит раньше — здесь короткая первой:
+        // без сортировки по длине вышло бы «Claude код».
+        let repl = Replacements(entries: [
+            Entry(from: "Клауд", to: "Claude"),
+            Entry(from: "Клауд код", to: "Claude Code"),
+        ])
+        XCTAssertEqual(repl.apply("Запусти Клауд код"), "Запусти Claude Code")
+        XCTAssertEqual(repl.apply("спроси Клауд"), "спроси Claude")
+    }
+
     func testCaseInsensitive() {
         XCTAssertEqual(Replacements.defaults.apply("запусти АЛАМУ"), "запусти Ollama")
         XCTAssertEqual(Replacements.defaults.apply("клауд код"), "Claude Code")
