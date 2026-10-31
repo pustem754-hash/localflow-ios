@@ -21,6 +21,10 @@ struct DictationView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+            } else if isWaitingForModel, controller.state != .idle {
+                Text("Модель загружается…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             recordButton
                 .padding(.bottom, 32)
@@ -55,12 +59,14 @@ struct DictationView: View {
             }
         case .idle:
             VStack(spacing: 8) {
-                Text("Нажми и говори").font(.title3)
                 if case .loading(let title) = store.engineState {
-                    Text("Модель \(title) загружается — говорить уже можно")
+                    Text("Модель загружается…").font(.title3)
+                    Text("\(title) — запись можно начать, когда загрузится")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                } else {
+                    Text("Нажми и говори").font(.title3)
                 }
             }
         case .recording:
@@ -126,6 +132,15 @@ struct DictationView: View {
         controller.state == .transcribing
     }
 
+    /// Модель грузится: начать запись нельзя; идущую запись закончить можно.
+    private var isWaitingForModel: Bool {
+        controller.isModelLoading && !isRecording
+    }
+
+    private var isButtonDisabled: Bool {
+        isTranscribing || controller.isBenchRunning || isWaitingForModel
+    }
+
     private var recordButton: some View {
         Button {
             controller.toggle()
@@ -137,8 +152,8 @@ struct DictationView: View {
                 .background(Circle().fill(isRecording ? Color.red : Color.accentColor))
         }
         .buttonStyle(.plain)
-        .disabled(isTranscribing || controller.isBenchRunning)
-        .opacity(isTranscribing || controller.isBenchRunning ? 0.4 : 1)
+        .disabled(isButtonDisabled)
+        .opacity(isButtonDisabled ? 0.4 : 1)
         .accessibilityLabel(isRecording ? "Закончить запись" : "Начать запись")
     }
 

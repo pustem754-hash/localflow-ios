@@ -57,12 +57,10 @@ final class DictationController: ObservableObject {
         })
     }
 
-    /// Модель годится для записи: загружена или ещё грузится (распознавание её дождётся).
-    private var modelUsable: Bool {
-        switch store.engineState {
-        case .loaded, .loading: return true
-        case .empty, .failed: return false
-        }
+    /// Модель грузится — запись не начинается (кнопка неактивна, «Модель загружается…»).
+    var isModelLoading: Bool {
+        if case .loading = store.engineState { return true }
+        return false
     }
 
     private func syncWithEngine(_ engineState: EngineState) {
@@ -99,7 +97,8 @@ final class DictationController: ObservableObject {
         Task {
             // Модель могла только что прийти через iTunes или ещё не выбраться после холодного запуска.
             await store.refresh()
-            while pendingIntentStart, UIApplication.shared.applicationState != .active {
+            // Запись — когда приложение на экране и модель загрузилась; нажатие кнопки ожидание снимает.
+            while pendingIntentStart, UIApplication.shared.applicationState != .active || isModelLoading {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
             guard pendingIntentStart else { return }
@@ -116,7 +115,10 @@ final class DictationController: ObservableObject {
         case .recording, .transcribing: return
         default: break
         }
-        guard modelUsable else {
+        switch store.engineState {
+        case .loaded: break
+        case .loading: return
+        case .empty, .failed:
             state = .noModel
             return
         }
@@ -199,10 +201,12 @@ final class DictationController: ObservableObject {
     }
 
     private func transcribe(_ samples: [Float], releasedAt: Date) async {
-        // Запуск из «Команд» на холодную: запись могла начаться, пока модель ещё грузилась.
+        // Во время записи могли выбрать другую модель — ждём её; ожидание не входит в «Распознано за».
+        let waitStart = Date()
         while case .loading = store.engineState {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
+        let waited = Date().timeIntervalSince(waitStart)
         guard case .loaded(let modelID) = store.engineState, modelID == store.selected, !isBenchRunning else {
             state = .noModel
             return
@@ -223,7 +227,7 @@ final class DictationController: ObservableObject {
         case .text(let text):
             UIPasteboard.general.string = text
             lastText = text
-            lastDuration = Date().timeIntervalSince(releasedAt)
+            lastDuration = Date().timeIntervalSince(releasedAt) - waited
             state = .copied(text: text)
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
