@@ -44,7 +44,9 @@ public struct Replacements: Equatable, Sendable {
         var table: [String: String] = [:]
         var keys: [String] = []
         for entry in entries {
-            let key = entry.from.lowercased()
+            // Пара из одних пробелов (с любой стороны) пропускается: иначе шаблон ловит пробелы в тексте.
+            let key = Self.normalizedKey(entry.from)
+            guard !key.isEmpty, !Self.isBlank(entry.to) else { continue }
             if table[key] == nil { keys.append(key) }
             table[key] = entry.to
         }
@@ -81,6 +83,15 @@ public struct Replacements: Equatable, Sendable {
 
     private static let whitespaceRun = try! NSRegularExpression(pattern: "\\s+")
 
+    /// Ключ таблицы: нижний регистр, без пробелов по краям, внутри — по одному пробелу.
+    private static func normalizedKey(_ from: String) -> String {
+        from.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    private static func isBlank(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private static func quote(_ text: String) -> String {
         var out = "\""
         for char in text {
@@ -104,12 +115,13 @@ public struct Replacements: Equatable, Sendable {
             chars = Array(line)
         }
 
+        /// Пустой ключ или значение, в том числе из одних пробелов в кавычках, — строка битая.
         mutating func entry() -> Entry? {
-            guard let from = scalar(isKey: true), !from.isEmpty else { return nil }
+            guard let from = scalar(isKey: true), !Replacements.isBlank(from) else { return nil }
             skipSpaces()
             guard index < chars.count, chars[index] == ":" else { return nil }
             index += 1
-            guard let to = scalar(isKey: false), !to.isEmpty else { return nil }
+            guard let to = scalar(isKey: false), !Replacements.isBlank(to) else { return nil }
             skipSpaces()
             // после значения допустим только комментарий
             guard index == chars.count || chars[index] == "#" else { return nil }

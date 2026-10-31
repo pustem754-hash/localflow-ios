@@ -78,6 +78,31 @@ final class ReplacementsTests: XCTestCase {
         XCTAssertEqual(Replacements.defaults.apply("Т-банк"), "Т-Банк")
     }
 
+    func testParseSkipsWhitespaceOnlyPairs() {
+        let text = """
+        "   ": "x"
+        "Клауд": "  "
+        "Кворк": "Kwork"
+        """
+        XCTAssertEqual(Replacements.parse(text).entries, [Entry(from: "Кворк", to: "Kwork")])
+    }
+
+    func testWhitespaceOnlyPairDoesNotBreakOthers() {
+        let repl = Replacements(entries: [
+            Entry(from: "   ", to: "x"),
+            Entry(from: "\t", to: "y"),
+            Entry(from: "Клауд", to: " "),
+            Entry(from: "Кворк", to: "Kwork"),
+        ])
+        XCTAssertEqual(repl.apply("заказ  с  Кворк ,  Клауд"), "заказ  с  Kwork ,  Клауд")
+        XCTAssertEqual(Replacements(entries: [Entry(from: "  ", to: "x")]).apply("a  ,  b"), "a  ,  b")
+    }
+
+    func testSpacesAroundAndInsideKeyAreNormalized() {
+        let repl = Replacements(entries: [Entry(from: "  Клауд   код ", to: "Claude Code")])
+        XCTAssertEqual(repl.apply("запусти Клауд код"), "запусти Claude Code")
+    }
+
     func testEmptyDictionaryChangesNothing() {
         XCTAssertEqual(Replacements(entries: []).apply("Клауд код"), "Клауд код")
     }
