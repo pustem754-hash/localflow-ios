@@ -95,6 +95,12 @@ struct DictationView: View {
                 Text("Скопировано ✓")
                     .font(.headline)
                     .foregroundStyle(.green)
+                if let note = controller.copyNote {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
                 if let seconds = controller.lastDuration {
                     Text("Распознано за \(DecimalComma.string(seconds)) c")
                         .font(.footnote)

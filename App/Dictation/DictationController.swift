@@ -19,6 +19,10 @@ final class DictationController: ObservableObject {
     @Published private(set) var lastDuration: TimeInterval?
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var level: Float = 0
+    /// Пояснение под «Скопировано», например что текст лёг в буфер только при возврате в приложение.
+    @Published private(set) var copyNote: String?
+
+    static let copiedOnReturnNote = "Распознано, пока LocalFlow был в фоне, — скопировано при возврате в приложение."
 
     /// Таск 04 («Замер»): пока `true`, диктовка не запускается — в `WhisperEngine.shared` может быть чужая модель.
     /// Идущая запись при включении флага отменяется без распознавания.
@@ -33,6 +37,8 @@ final class DictationController: ObservableObject {
     private var timer: Timer?
     private var isStarting = false
     private var pendingIntentStart = false
+    /// Распознано в фоне — из фона в буфер не пишем, кладём при возврате.
+    private var deferredCopy = DeferredCopy()
     private var observers: [NSObjectProtocol] = []
     private var engineSubscription: AnyCancellable?
 
@@ -54,6 +60,10 @@ final class DictationController: ObservableObject {
         observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil,
                                             queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.cancelRecording(to: .failed(Self.interruptedMessage)) }
+        })
+        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil,
+                                            queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.deliverDeferredCopy() }
         })
     }
 
@@ -148,6 +158,7 @@ final class DictationController: ObservableObject {
         let since = Date()
         elapsed = 0
         level = 0
+        copyNote = nil
         state = .recording(since: since)
         let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -225,11 +236,25 @@ final class DictationController: ObservableObject {
         case .rejected(let reason):
             state = .rejected(reason)
         case .text(let text):
-            UIPasteboard.general.string = text
             lastText = text
             lastDuration = Date().timeIntervalSince(releasedAt) - waited
-            state = .copied(text: text)
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            let inForeground = UIApplication.shared.applicationState != .background
+            if let now = deferredCopy.deliver(text, inForeground: inForeground) {
+                copied(now, note: nil)
+            }
+            // Иначе до возврата в приложение на экране «Распознаю…», в буфер — в `deliverDeferredCopy()`.
         }
+    }
+
+    private func copied(_ text: String, note: String?) {
+        Clipboard.copy(text)
+        copyNote = note
+        state = .copied(text: text)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    private func deliverDeferredCopy() {
+        guard let text = deferredCopy.takeOnReturn() else { return }
+        copied(text, note: Self.copiedOnReturnNote)
     }
 }
