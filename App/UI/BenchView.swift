@@ -20,6 +20,7 @@ struct BenchView: View {
             .navigationTitle("Замер")
             // Модель, скопированная через iTunes, пока приложение было открыто, видна без перезапуска.
             .task { await store.refresh() }
+            .onAppear { phraseRecorder.onPhrase = { [runner] samples in runner.addPhrase(samples) } }
             .alert("Не получилось",
                    isPresented: Binding(get: { runner.errorText != nil || phraseRecorder.errorText != nil },
                                         set: { if !$0 { runner.errorText = nil; phraseRecorder.errorText = nil } })) {
@@ -54,17 +55,13 @@ struct BenchView: View {
         } header: {
             Text("Фразы для замера")
         } footer: {
-            Text("Надиктуй свои фразы — короткую и длинную, как в обычной диктовке.")
+            Text("Надиктуй свои фразы — короткую и длинную, как в обычной диктовке. Предел — 2:00.")
         }
     }
 
     private var recordButton: some View {
         Button {
-            Task {
-                if let samples = await phraseRecorder.toggle(), !samples.isEmpty {
-                    runner.addPhrase(samples)
-                }
-            }
+            Task { await phraseRecorder.toggle() }
         } label: {
             if phraseRecorder.isRecording {
                 Label("Стоп — \(DecimalComma.string(phraseRecorder.elapsed)) c", systemImage: "stop.fill")

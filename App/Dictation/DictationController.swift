@@ -9,8 +9,6 @@ import UIKit
 final class DictationController: ObservableObject {
     static let shared = DictationController()
 
-    /// R08.1: на 2:00 запись останавливается сама и распознаётся.
-    static let maxRecordingSeconds: TimeInterval = 120
     static let interruptedMessage = "Запись прервана — повтори"
 
     @Published private(set) var state: DictationState = .idle
@@ -171,7 +169,8 @@ final class DictationController: ObservableObject {
         guard case .recording(let since) = state else { return }
         elapsed = Date().timeIntervalSince(since)
         level = recorder.level
-        if elapsed >= Self.maxRecordingSeconds { finish() }
+        // На 2:00 запись останавливается сама и распознаётся.
+        if RecordingGuard.reachedLimit(elapsed: elapsed) { finish() }
     }
 
     private func stopTimer() {

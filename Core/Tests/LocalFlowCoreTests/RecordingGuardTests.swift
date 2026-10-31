@@ -11,6 +11,13 @@ final class RecordingGuardTests: XCTestCase {
         XCTAssertEqual(RecordingGuard.lostMin, 1.5)
     }
 
+    func testLimitIsTwoMinutesForDictationAndBench() {
+        XCTAssertEqual(RecordingGuard.maxRecordingSeconds, 120)
+        XCTAssertFalse(RecordingGuard.reachedLimit(elapsed: 119.99))
+        XCTAssertTrue(RecordingGuard.reachedLimit(elapsed: 120))
+        XCTAssertTrue(RecordingGuard.reachedLimit(elapsed: 120.05))
+    }
+
     func testTouchShorterThanMinHoldIsRejected() {
         XCTAssertEqual(RecordingGuard.decide(hold: 0.2, audio: 0.2), .reject(.tooShort(hold: 0.2)))
     }

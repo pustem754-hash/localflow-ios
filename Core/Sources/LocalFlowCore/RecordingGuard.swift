@@ -26,6 +26,13 @@ public enum RecordingGuard {
     /// MIN_HOLD_S, EXTRA_AUDIO_S, LOST_AUDIO_S, LOST_AUDIO_SHARE, LOST_AUDIO_MIN_S из LocalFlow main.py.
     public static let minHold = 0.3, extraAudio = 0.5, lostAudio = 1.0, lostShare = 0.75, lostMin = 1.5
 
+    /// Предел одной записи — 2:00, и в диктовке, и в записи фраз «Замера»: дальше запись останавливается сама.
+    public static let maxRecordingSeconds = 120.0
+
+    public static func reachedLimit(elapsed: Double) -> Bool {
+        elapsed >= maxRecordingSeconds
+    }
+
     /// Как текущий LocalFlow main.py `_finalize` (после 16.10 01:08), в том же порядке.
     /// `hold` — сколько шла запись, `audio` — сколько секунд звука реально пришло.
     public static func decide(hold: Double, audio: Double) -> RecordingDecision {
