@@ -20,3 +20,5 @@ BRIEF.md
 *.bin
 *.ipa
 Payload/
+# служебные файлы плагина oh-my-claudecode
+.omc/
