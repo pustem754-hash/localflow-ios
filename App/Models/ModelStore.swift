@@ -94,6 +94,8 @@ final class ModelStore: ObservableObject {
         var values = URLResourceValues()
         values.isExcludedFromBackup = true   // ~0,5 ГБ на модель — не в резервную копию iCloud
         try? dir.setResourceValues(values)
+        // Приложение закрыли посреди импорта или скачивания — недокопированный файл убирается здесь.
+        ModelLeftovers.removeAll(in: modelsDirectory)
 
         refreshDownloaded()
         // При каждом возвращении в приложение — снова проверить общие файлы iTunes.
@@ -221,10 +223,11 @@ final class ModelStore: ObservableObject {
 
     /// Файл из «Файлов»: опознаётся по точному размеру, копируется к себе и проверяется по sha256.
     /// Хэш не совпал — удаляется копия, оригинал в «Файлах» не трогается.
+    /// `progress` — доля скопированного 0…1; копирование и хэш — вне главного потока.
     @discardableResult
-    func importFile(at url: URL) async throws -> ModelInfo {
+    func importFile(at url: URL, progress: @escaping @MainActor (Double) -> Void = { _ in }) async throws -> ModelInfo {
         let copy = modelsDirectory.appendingPathComponent(UUID().uuidString + ".import")
-        let model = try copyForImport(url, to: copy)
+        let model = try await copyForImport(url, to: copy, progress: progress)
         do {
             try await verify(copy, as: model)
         } catch {
@@ -235,22 +238,30 @@ final class ModelStore: ObservableObject {
         return model
     }
 
-    private func copyForImport(_ url: URL, to copy: URL) throws -> ModelInfo {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let bytes = fileSize(url) else {
-            throw ModelStoreError.fileFailed("не удалось прочитать \(url.lastPathComponent)")
-        }
-        guard let model = ModelInfo.identify(bytes: bytes, in: catalog) else {
-            throw ModelStoreError.notInCatalog(name: url.lastPathComponent, bytes: bytes)
-        }
-        do {
-            try fm.copyItem(at: url, to: copy)
-        } catch {
-            try? fm.removeItem(at: copy)
-            throw ModelStoreError.fileFailed(error.localizedDescription)
-        }
-        return model
+    /// Копия 0,5 ГБ идёт вне главного потока кусками — экран не замирает. Закрыли приложение
+    /// посреди копирования — `*.import` убирает `ModelLeftovers` при следующем запуске.
+    private func copyForImport(_ url: URL, to copy: URL,
+                               progress: @escaping @MainActor (Double) -> Void) async throws -> ModelInfo {
+        let catalog = self.catalog
+        return try await Task.detached(priority: .userInitiated) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber
+            guard let bytes = size?.int64Value else {
+                throw ModelStoreError.fileFailed("не удалось прочитать \(url.lastPathComponent)")
+            }
+            guard let model = ModelInfo.identify(bytes: bytes, in: catalog) else {
+                throw ModelStoreError.notInCatalog(name: url.lastPathComponent, bytes: bytes)
+            }
+            do {
+                try ChunkedCopy.copy(from: url, to: copy) { fraction in
+                    Task { @MainActor in progress(fraction) }
+                }
+            } catch {
+                throw ModelStoreError.fileFailed(error.localizedDescription)
+            }
+            return model
+        }.value
     }
 
     /// `.bin` в корне Documents (туда кладёт общий доступ iTunes): опознанные по размеру проверяются

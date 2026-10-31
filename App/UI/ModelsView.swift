@@ -10,7 +10,8 @@ struct ModelsView: View {
     @ObservedObject private var dictation = DictationController.shared
     @State private var downloading: [ModelInfo.ID: Double] = [:]
     @State private var importing = false
-    @State private var verifyingImport = false
+    /// Идёт импорт: доля скопированного; 1 — копия готова, считается sha256.
+    @State private var importProgress: Double?
     @State private var pendingDelete: ModelInfo?
     @State private var errorText: String?
     @State private var infoText: String?
@@ -23,7 +24,11 @@ struct ModelsView: View {
                     ForEach(store.catalog) { model in row(model) }
                 }
                 Section {
-                    if verifyingImport {
+                    if let fraction = importProgress, fraction < 1 {
+                        ProgressView(value: fraction) {
+                            Text("Копирую файл… \(Int(fraction * 100)) %").font(.caption)
+                        }
+                    } else if importProgress != nil {
                         HStack {
                             ProgressView()
                             Text("Проверяю файл (sha256)…")
@@ -183,15 +188,17 @@ struct ModelsView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            verifyingImport = true
+            importProgress = 0
             Task {
                 do {
-                    let model = try await store.importFile(at: url)
+                    let model = try await store.importFile(at: url) { fraction in
+                        if importProgress != nil { importProgress = fraction }
+                    }
                     infoText = "\(model.title) импортирована и проверена."
                 } catch {
                     errorText = error.localizedDescription
                 }
-                verifyingImport = false
+                importProgress = nil
             }
         case .failure(let error):
             errorText = error.localizedDescription
