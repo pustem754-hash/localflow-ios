@@ -7,14 +7,15 @@ enum MicPermission: Equatable {
 }
 
 enum RecorderError: LocalizedError {
-    case noInput
+    /// В скобках — что iOS отдаёт на входе: по снимку экрана видно, почему 0 Гц.
+    case noInput(String)
     case formatFailed
     case sessionFailed(String)
     case engineFailed(String)
 
     var errorDescription: String? {
         switch self {
-        case .noInput: return "Микрофон не найден."
+        case .noInput(let report): return "Микрофон не найден (\(report))."
         case .formatFailed: return "Не удалось настроить перевод звука в 16 кГц."
         case .sessionFailed(let reason): return "Аудиосессия не включилась: \(reason)"
         case .engineFailed(let reason): return "Запись не запустилась: \(reason)"
@@ -27,7 +28,8 @@ enum RecorderError: LocalizedError {
 final class AudioRecorder {
     static let sampleRate: Double = 16000
 
-    /// После неудачного запуска заменяется новым: следующая попытка заново спрашивает формат входа.
+    /// Новый на каждую попытку записи: движок запоминает формат входа, и пустой формат после Siri
+    /// иначе остаётся до закрытия приложения.
     private var engine = AVAudioEngine()
     private let lock = NSLock()
     private var samples: [Float] = []
@@ -52,6 +54,9 @@ final class AudioRecorder {
     func start() throws {
         guard !isRunning else { return }
         let session = AVAudioSession.sharedInstance()
+        engine = AVAudioEngine()
+        // Сессия включается заново, даже если осталась активной после прошлой попытки.
+        try? session.setActive(false)
         do {
             try session.setCategory(.record, mode: .default, options: [])
             try session.setActive(true)
@@ -62,10 +67,10 @@ final class AudioRecorder {
         let input = engine.inputNode
         let inFormat = input.outputFormat(forBus: 0)
         guard inFormat.sampleRate > 0, inFormat.channelCount > 0 else {
-            // Вход ещё занят (например, Siri): движок мог запомнить пустой формат.
-            engine = AVAudioEngine()
+            // Вход ещё занят (например, Siri).
+            let report = Self.inputReport(session, inFormat)
             deactivateSession()
-            throw RecorderError.noInput
+            throw RecorderError.noInput(report)
         }
         guard let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Self.sampleRate,
                                             channels: 1, interleaved: false),
@@ -87,7 +92,6 @@ final class AudioRecorder {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
-            engine = AVAudioEngine()
             deactivateSession()
             throw RecorderError.engineFailed(error.localizedDescription)
         }
@@ -108,6 +112,20 @@ final class AudioRecorder {
             currentLevel = 0
             return result
         }
+    }
+
+    /// «вход нет, маршрут: нет, доступны: Микрофон iPhone, сессия Record 48000 Гц, каналов 1, доступ granted,
+    /// узел 0 Гц, каналов 0». Нет входа и маршрута — микрофон держит система; маршрут есть, а узел 0 Гц — сбой у нас.
+    private static func inputReport(_ session: AVAudioSession, _ format: AVAudioFormat) -> String {
+        let route = session.currentRoute.inputs.map { "\($0.portName) [\($0.portType.rawValue)]" }
+        let available = session.availableInputs?.map(\.portName) ?? []
+        return "вход \(session.isInputAvailable ? "есть" : "нет"), "
+            + "маршрут: \(route.isEmpty ? "нет" : route.joined(separator: ", ")), "
+            + "доступны: \(available.isEmpty ? "нет" : available.joined(separator: ", ")), "
+            + "сессия \(session.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")) "
+            + "\(Int(session.sampleRate)) Гц, каналов \(session.inputNumberOfChannels), "
+            + "доступ \(AVAudioApplication.shared.recordPermission == .granted ? "granted" : "нет"), "
+            + "узел \(Int(format.sampleRate)) Гц, каналов \(format.channelCount)"
     }
 
     private func deactivateSession() {

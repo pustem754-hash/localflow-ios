@@ -40,6 +40,8 @@ final class DictationController: ObservableObject {
     private var isSceneActive = false
     /// Прерывание аудиосессии кончилось (Siri отпустила микрофон) — пауза между попытками кончается раньше.
     private var micReleased = false
+    /// Последняя ошибка микрофона при повторах из «Команд» — показывается под «Микрофон занят».
+    private var lastMicError: String?
     /// Распознано в фоне — из фона в буфер не пишем, кладём при возврате.
     private var deferredCopy = DeferredCopy()
     private var observers: [NSObjectProtocol] = []
@@ -171,12 +173,15 @@ final class DictationController: ObservableObject {
         guard !isBenchRunning else { return }
 
         if fromIntent {
+            lastMicError = nil
             // Siri ещё держит микрофон: «Микрофон не найден» или сессия не включается — повторяем до 3 c.
             let started = await MicRetry.run(now: { ProcessInfo.processInfo.systemUptime },
                                              attempt: { await self.tryStartRecorder() },
                                              wait: { await self.waitForMic($0) })
             guard started else {
-                if !isBenchRunning { state = .failed(MicRetry.busyMessage) }
+                if !isBenchRunning {
+                    state = .failed([MicRetry.busyMessage, lastMicError].compactMap { $0 }.joined(separator: "\n"))
+                }
                 return
             }
             // Между запуском микрофона и этой строкой могли уйти в фон или начать «Замер».
@@ -211,6 +216,7 @@ final class DictationController: ObservableObject {
             try recorder.start()
             return true
         } catch {
+            lastMicError = error.localizedDescription
             return false
         }
     }
