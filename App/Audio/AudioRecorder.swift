@@ -27,7 +27,8 @@ enum RecorderError: LocalizedError {
 final class AudioRecorder {
     static let sampleRate: Double = 16000
 
-    private let engine = AVAudioEngine()
+    /// После неудачного запуска заменяется новым: следующая попытка заново спрашивает формат входа.
+    private var engine = AVAudioEngine()
     private let lock = NSLock()
     private var samples: [Float] = []
     private var currentLevel: Float = 0
@@ -61,6 +62,8 @@ final class AudioRecorder {
         let input = engine.inputNode
         let inFormat = input.outputFormat(forBus: 0)
         guard inFormat.sampleRate > 0, inFormat.channelCount > 0 else {
+            // Вход ещё занят (например, Siri): движок мог запомнить пустой формат.
+            engine = AVAudioEngine()
             deactivateSession()
             throw RecorderError.noInput
         }
@@ -84,6 +87,7 @@ final class AudioRecorder {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
+            engine = AVAudioEngine()
             deactivateSession()
             throw RecorderError.engineFailed(error.localizedDescription)
         }

@@ -38,6 +38,8 @@ final class DictationController: ObservableObject {
     private var pendingStart = PendingStart()
     /// `scenePhase == .active` — ставит `RootView`.
     private var isSceneActive = false
+    /// Прерывание аудиосессии кончилось (Siri отпустила микрофон) — пауза между попытками кончается раньше.
+    private var micReleased = false
     /// Распознано в фоне — из фона в буфер не пишем, кладём при возврате.
     private var deferredCopy = DeferredCopy()
     private var observers: [NSObjectProtocol] = []
@@ -57,8 +59,14 @@ final class DictationController: ObservableObject {
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil,
                                             queue: .main) { [weak self] note in
             let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
-            guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .began else { return }
-            MainActor.assumeIsolated { self?.cancelRecording(to: .failed(Self.interruptedMessage)) }
+            let type = raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+            MainActor.assumeIsolated {
+                switch type {
+                case .began: self?.cancelRecording(to: .failed(Self.interruptedMessage))
+                case .ended: self?.micReleased = true
+                default: break
+                }
+            }
         })
         observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil,
                                             queue: .main) { [weak self] _ in
@@ -126,12 +134,13 @@ final class DictationController: ObservableObject {
     /// Зовут: просьба, конец проверки моделей, смена `scenePhase`, смена состояния движка.
     private func startPendingIfReady() {
         guard pendingStart.take(sceneActive: isSceneActive, modelLoading: isModelLoading) else { return }
-        Task { await begin() }
+        Task { await begin(fromIntent: true) }
     }
 
     // MARK: Запись
 
-    private func begin() async {
+    /// `fromIntent` — запуск из «Команд»: после Siri микрофон может быть ещё занят, запуск повторяется.
+    private func begin(fromIntent: Bool = false) async {
         guard !isStarting, !isBenchRunning else { return }
         switch state {
         case .recording, .transcribing: return
@@ -161,11 +170,27 @@ final class DictationController: ObservableObject {
         }
         guard !isBenchRunning else { return }
 
-        do {
-            try recorder.start()
-        } catch {
-            state = .failed(error.localizedDescription)
-            return
+        if fromIntent {
+            // Siri ещё держит микрофон: «Микрофон не найден» или сессия не включается — повторяем до 3 c.
+            let started = await MicRetry.run(now: { ProcessInfo.processInfo.systemUptime },
+                                             attempt: { await self.tryStartRecorder() },
+                                             wait: { await self.waitForMic($0) })
+            guard started else {
+                if !isBenchRunning { state = .failed(MicRetry.busyMessage) }
+                return
+            }
+            // Между запуском микрофона и этой строкой могли уйти в фон или начать «Замер».
+            guard !isBenchRunning, isSceneActive else {
+                _ = recorder.stop()
+                return
+            }
+        } else {
+            do {
+                try recorder.start()
+            } catch {
+                state = .failed(error.localizedDescription)
+                return
+            }
         }
         let since = Date()
         elapsed = 0
@@ -177,6 +202,26 @@ final class DictationController: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+    }
+
+    /// Одна попытка для `MicRetry`: `false` — микрофон занят, начался «Замер» или приложение ушло с экрана.
+    private func tryStartRecorder() -> Bool {
+        guard !isBenchRunning, isSceneActive else { return false }
+        do {
+            try recorder.start()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Пауза между попытками до `seconds`; конец прерывания аудиосессии будит раньше.
+    private func waitForMic(_ seconds: TimeInterval) async {
+        micReleased = false
+        let deadline = Date().addingTimeInterval(seconds)
+        while !micReleased, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
     }
 
     private func tick() {
