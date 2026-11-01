@@ -19,6 +19,7 @@ struct LocalFlowApp: App {
 
 struct RootView: View {
     @ObservedObject private var navigation = AppNavigation.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: $navigation.tab) {
@@ -34,6 +35,10 @@ struct RootView: View {
             BenchView()
                 .tabItem { Label("Замер", systemImage: "stopwatch") }
                 .tag(AppTab.bench)
+        }
+        // Запись по «Начать диктовку» ждёт активной сцены; `initial` — сцена могла стать активной раньше.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            DictationController.shared.sceneActivityChanged(phase == .active)
         }
     }
 }

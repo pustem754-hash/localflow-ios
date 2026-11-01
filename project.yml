@@ -4,7 +4,7 @@ name: LocalFlow
 options:
   bundleIdPrefix: io.github.pustem754
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
   developmentLanguage: ru
 settings:
   base:
@@ -16,7 +16,7 @@ targets:
   LocalFlow:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "26.0"
     sources:
       - path: App
         excludes:

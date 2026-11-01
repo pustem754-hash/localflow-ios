@@ -74,6 +74,12 @@ jobs:
           test -f "$app/ggml-silero-v6.2.0.bin"
           test -d "$app/Frameworks/whisper.framework"
           plutil -p "$app/Info.plist" | grep -E 'NSMicrophoneUsageDescription|UIFileSharingEnabled|LSSupportsOpeningDocumentsInPlace'
+          plutil -p "$app/Info.plist" | grep '"MinimumOSVersion" => "26.0"'
+          # Метаданные App Intents: по ним «Команды», Spotlight и Siri знают действие и готовую команду.
+          meta="$app/Metadata.appintents/extract.actionsdata"
+          test -f "$meta"
+          grep -q StartDictationIntent "$meta"
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); a=d.get("actions",{}).get("StartDictationIntent",{}); print({k:v for k,v in a.items() if "ode" in k or "open" in k.lower()}); print("autoShortcuts:", json.dumps(d.get("autoShortcuts"), ensure_ascii=False)[:800])' "$meta" || true
           mkdir -p Payload
           cp -R "$app" Payload/
           zip -qry LocalFlow.ipa Payload

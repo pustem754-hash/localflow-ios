@@ -34,7 +34,10 @@ final class DictationController: ObservableObject {
     private let store: ModelStore
     private var timer: Timer?
     private var isStarting = false
-    private var pendingIntentStart = false
+    /// Просьба «Начать диктовку» из «Команд» ждёт активной сцены и готовой модели.
+    private var pendingStart = PendingStart()
+    /// `scenePhase == .active` — ставит `RootView`.
+    private var isSceneActive = false
     /// Распознано в фоне — из фона в буфер не пишем, кладём при возврате.
     private var deferredCopy = DeferredCopy()
     private var observers: [NSObjectProtocol] = []
@@ -45,6 +48,8 @@ final class DictationController: ObservableObject {
         syncWithEngine(store.engineState)
         engineSubscription = store.$engineState.sink { [weak self] engineState in
             MainActor.assumeIsolated { self?.syncWithEngine(engineState) }
+            // @Published шлёт значение до записи в свойство — модель проверяем следующим шагом.
+            Task { @MainActor in self?.startPendingIfReady() }
         }
 
         let center = NotificationCenter.default
@@ -86,7 +91,7 @@ final class DictationController: ObservableObject {
     // MARK: Кнопка
 
     func toggle() {
-        pendingIntentStart = false   // нажатие кнопки отменяет ожидающий запуск из «Команд»
+        pendingStart.cancel()   // нажатие кнопки отменяет ожидающий запуск из «Команд»
         switch state {
         case .recording: finish()
         case .transcribing: return
@@ -94,25 +99,34 @@ final class DictationController: ObservableObject {
         }
     }
 
-    /// App Intent «Начать диктовку»: открыть вкладку и начать запись, как только приложение на экране.
+    /// App Intent «Начать диктовку»: открыть вкладку и поставить просьбу о записи — без ожидания,
+    /// `perform()` возвращается сразу. Запись начнёт `startPendingIfReady()`.
     func startFromIntent() {
         AppNavigation.shared.tab = .dictation
         switch state {
         case .recording, .transcribing: return
         default: break
         }
-        pendingIntentStart = true
+        pendingStart.request()
         Task {
             // Модель могла только что прийти через iTunes или ещё не выбраться после холодного запуска.
             await store.refresh()
-            // Запись — когда приложение на экране и модель загрузилась; нажатие кнопки ожидание снимает.
-            while pendingIntentStart, UIApplication.shared.applicationState != .active || isModelLoading {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-            guard pendingIntentStart else { return }
-            pendingIntentStart = false
-            await begin()
+            pendingStart.modelsCheckFinished()
+            startPendingIfReady()
         }
+    }
+
+    /// `scenePhase` из `RootView`: запись из «Команд» начинается только с активной сценой.
+    func sceneActivityChanged(_ active: Bool) {
+        isSceneActive = active
+        startPendingIfReady()
+    }
+
+    /// Сцена активна, модели проверены, модель не грузится — начать запись по просьбе из «Команд».
+    /// Зовут: просьба, конец проверки моделей, смена `scenePhase`, смена состояния движка.
+    private func startPendingIfReady() {
+        guard pendingStart.take(sceneActive: isSceneActive, modelLoading: isModelLoading) else { return }
+        Task { await begin() }
     }
 
     // MARK: Запись

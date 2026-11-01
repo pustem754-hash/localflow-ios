@@ -99,11 +99,11 @@ whisper.cpp, XcodeGen, Silero VAD, конвертация весов Whisper в 
 | Клавиатуры-расширения не имеют доступа к микрофону — «Custom keyboards, like all app extensions in iOS 8.0, have no access to the device microphone, so dictation input is not possible.» | клавиатуру не делаем, запись — только в основном приложении | developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/CustomKeyboard.html |
 | Лимит памяти клавиатуры-расширения | Apple не публикует; README проекта Dictus указывает «~50 MB» — Whisper в такой лимит не поместился бы, это ещё одна причина не делать клавиатуру | github.com/getdictus/dictus-ios |
 | Запись на iOS идёт, только пока приложение открыто | так же у нас: запуск через «Команды» открывает приложение, а не держит его в фоне | FAQ Aiko: «iOS apps are fundamentally restricted from operating in the background» |
-| App Intents, `openAppWhenRun` — «consider the app intent even if its app is not in the foreground» (iOS 16+; начиная с iOS 26 помечен устаревшим: «Use supportedModes instead») | команда «Начать диктовку» открывает приложение; на iOS 26+ используем `supportedModes` | developer.apple.com/documentation/appintents/appintent/openappwhenrun |
+| App Intents, `openAppWhenRun` — «consider the app intent even if its app is not in the foreground» (iOS 16+; начиная с iOS 26 помечен устаревшим: «Use supportedModes instead») | команда «Начать диктовку» открывает приложение через `supportedModes = .foreground(.immediate)` — приложение на экране до `perform()`; `openAppWhenRun` не используем | developer.apple.com/documentation/appintents/appintent/openappwhenrun |
 | `AudioRecordingIntent` (iOS 18+) — «you must start a Live Activity … If you don't start a Live Activity, the audio recording stops» | запись без открытия приложения руками возможна только через Live Activity | developer.apple.com/documentation/appintents/audiorecordingintent |
 | Live Activity (iOS 18+) — та же страница, что выше про `AudioRecordingIntent` | не делаем в этой сборке: усложняет сборку, запись и так начинается через открытие приложения | developer.apple.com/documentation/appintents/audiorecordingintent |
 | Двойное касание задней панели: iPhone 8+, iOS 14+ | iPhone 11 подходит | support.apple.com/guide/shortcuts/apd897693606/ios; support.apple.com/en-us/111772 |
-| Минимальная iOS приложения — 17.0 | покрывает любую систему на iPhone 11 (поддерживает iOS 26 и 27) | project.yml, support.apple.com (списки совместимости) |
+| Минимальная iOS приложения — 26.0: с неё есть `supportedModes` у App Intents | iPhone 11 поддерживает iOS 26 и 27 | project.yml, developer.apple.com/documentation/appintents/appintent/supportedmodes, support.apple.com (списки совместимости) |
 
 ## Модели
 

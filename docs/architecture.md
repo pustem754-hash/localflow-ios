@@ -18,11 +18,11 @@
 
 ### `LocalFlowCore` (`Core/`) — чистая логика, без iOS
 
-Swift Package без зависимостей от UIKit/SwiftUI, только Foundation; тестируется `swift test` на Linux в CI (`docs/adr/0003`). Владеет: правилами отказа по длительности (`RecordingGuard`, `RejectReason`), списком выдумок Whisper (`Hallucinations`), вырезкой слов-паразитов (`Fillers`), словарём замен (`Replacements`), склейкой этого в один пайплайн (`TextPipeline`), параметрами ASR (`ASRSettings`), форматированием чисел с запятой (`DecimalComma`), отчётом экрана «Замер» (`BenchReport`, `BenchRow`), проверкой файла модели по sha256 (`ModelFileCheck`), копированием и уборкой файлов моделей (`ChunkedCopy`, `ModelLeftovers`), проверкой памяти перед загрузкой (`MemoryCheck`), отложенной записью в буфер (`DeferredCopy`) и «одной операцией за раз» для проверки общих файлов (`SingleFlight`). Файлы — `Core/Sources/LocalFlowCore/*.swift`, один файл на тип; тесты зеркалят имена в `Core/Tests/LocalFlowCoreTests/`.
+Swift Package без зависимостей от UIKit/SwiftUI, только Foundation; тестируется `swift test` на Linux в CI (`docs/adr/0003`). Владеет: правилами отказа по длительности (`RecordingGuard`, `RejectReason`), списком выдумок Whisper (`Hallucinations`), вырезкой слов-паразитов (`Fillers`), словарём замен (`Replacements`), склейкой этого в один пайплайн (`TextPipeline`), параметрами ASR (`ASRSettings`), форматированием чисел с запятой (`DecimalComma`), отчётом экрана «Замер» (`BenchReport`, `BenchRow`), проверкой файла модели по sha256 (`ModelFileCheck`), копированием и уборкой файлов моделей (`ChunkedCopy`, `ModelLeftovers`), проверкой памяти перед загрузкой (`MemoryCheck`), отложенной записью в буфер (`DeferredCopy`), ожиданием записи по «Начать диктовку» (`PendingStart`) и «одной операцией за раз» для проверки общих файлов (`SingleFlight`). Файлы — `Core/Sources/LocalFlowCore/*.swift`, один файл на тип; тесты зеркалят имена в `Core/Tests/LocalFlowCoreTests/`.
 
 Граница держится в одну сторону: `App/` зависит от `LocalFlowCore`, обратной зависимости нет. Любая логика, которую можно проверить без iPhone, идёт в `Core`, а не в `App`.
 
-### `App/` — iOS-приложение (SwiftUI, iOS 17+)
+### `App/` — iOS-приложение (SwiftUI, iOS 26+)
 
 | Модуль | Файл | Владеет | Открывает |
 |---|---|---|---|
@@ -31,11 +31,11 @@ Swift Package без зависимостей от UIKit/SwiftUI, только F
 | `ModelStore` | `App/Models/ModelStore.swift` | каталог моделей, загрузка/импорт/удаление, общие файлы iTunes, выбранная модель, состояние движка | `catalog`, `downloaded`, `selected`, `engineState`, `download(_:progress:) async throws`, `importFile(at:progress:) async throws`, `adoptSharedFiles() async`, `refresh() async`, `isCheckingSharedFiles`, `delete(_:) async throws`, `select(_:) async`, `loadSelected() async` |
 | `ModelInfo` | `App/Models/ModelInfo.swift` | каталог трёх моделей (id, title, fileName, url, bytes, sha256) | `catalog`, `identify(bytes:in:)`, `formatBytes(_:)`, `catalogListText` |
 | `MemoryProbe` | `App/Engine/MemoryProbe.swift` | замер памяти процесса (`phys_footprint`) | `currentMB() -> Double` |
-| `DictationController` | `App/Dictation/DictationController.swift` | состояние диктовки, порядок шагов, таймер записи, буфер обмена | `state`, `toggle()`, `startFromIntent()`, `lastText`, `lastDuration`, `isBenchRunning` |
+| `DictationController` | `App/Dictation/DictationController.swift` | состояние диктовки, порядок шагов, таймер записи, буфер обмена | `state`, `toggle()`, `startFromIntent()`, `sceneActivityChanged(_:)`, `lastText`, `lastDuration`, `isBenchRunning` |
 | `DictationReplacements` | `App/Dictation/DictationReplacements.swift` | единая точка входа в словарь замен для диктовки | `current() -> Replacements` |
 | `ReplacementsFile` | `App/Dictionary/ReplacementsFile.swift` | файл словаря в Documents | `load() -> Replacements`, `save(_:) throws` |
 | `AppNavigation` | `App/Dictation/AppNavigation.swift` | выбранная вкладка `TabView` | `tab: AppTab` |
-| `StartDictationIntent` | `App/Intents/StartDictationIntent.swift` | App Intent «Начать диктовку» для «Команд» | открывает приложение, вызывает `startFromIntent()` |
+| `StartDictationIntent`, `LocalFlowShortcuts` | `App/Intents/StartDictationIntent.swift` | App Intent «Начать диктовку» и готовая команда для «Команд», Spotlight и Siri | `supportedModes = .foreground(.immediate)`; `perform()` вызывает `startFromIntent()` и сразу возвращается, запись начинается при `scenePhase == .active` |
 | `BenchRunner`, `PhraseRecorder`, `DeviceInfo` | `App/Bench/*.swift` | прогон «Замер»: своя запись фразы, прогон через каждую модель, сбор `BenchRow` | использует `WhisperEngine.shared` и `ModelStore.shared` напрямую |
 
 Экраны (`App/UI/*.swift`): `DictationView`, `ModelsView`, `DictionaryView`, `BenchView` — навигация `TabView` в `App/LocalFlowApp.swift`.
